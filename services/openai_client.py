@@ -121,10 +121,10 @@ class OpenAIClient:
             
             system_prompt = f"Translate the following text into {target_language} only. Maintain the original formatting and meaning."
             
-            response = self.client.responses.create(
-                model="gpt-4.1-mini",
-                reasoning={"effort": "low"},
-                input=[
+            # Use chat completions for translation as gpt-4.1-mini may not support responses API
+            response = self.client.chat.completions.create(
+                model="gpt-4",  # Use gpt-4 for translation which is more stable
+                messages=[
                     {
                         "role": "system",
                         "content": system_prompt
@@ -134,17 +134,16 @@ class OpenAIClient:
                         "content": text
                     }
                 ],
-                max_output_tokens=2048
+                max_tokens=2048
             )
             
-            if response.status == "incomplete":
-                logger.warning(f"Translation incomplete: {response.incomplete_details}")
-                if response.output_text:
-                    return response.output_text
-                else:
-                    raise Exception("Translation incomplete during reasoning phase")
+            # Create a response object that matches the expected format
+            class MockResponse:
+                def __init__(self, content):
+                    self.output_text = content
+                    self.status = "completed"
             
-            return response.output_text or text
+            return response.choices[0].message.content or text
             
         except Exception as e:
             logger.error(f"Translation API error for {target_language}: {str(e)}")
