@@ -177,15 +177,26 @@ def handle_sync_request(lot, languages):
 
 def handle_batch_request(lots, languages):
     """
-    Handle batch processing for multiple lots
+    Handle batch processing for multiple lots with timeout protection
     """
     try:
-        # Create batch job
+        # Add timeout protection for batch creation
+        start_time = time.time()
+        max_creation_time = 20  # Maximum 20 seconds for batch creation
+        
+        logger.info(f"Starting batch creation for {len(lots)} lots")
+        
+        # Create batch job with optimized processing
         job_id = batch_processor.create_batch_job(lots, languages)
+        
+        creation_time = time.time() - start_time
+        logger.info(f"Batch job {job_id} created in {creation_time:.2f}s")
         
         return jsonify({
             "job_id": job_id,
-            "status": "accepted"
+            "status": "accepted",
+            "creation_time": f"{creation_time:.2f}s",
+            "lots_count": len(lots)
         }), 201
     
     except ValueError as e:

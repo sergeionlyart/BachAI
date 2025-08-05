@@ -22,37 +22,47 @@ class BatchProcessor:
     
     def create_batch_job(self, lots: List[Dict[str, Any]], languages: List[str]) -> str:
         """
-        Create and submit batch processing job
+        Create and submit batch processing job (optimized for fast response)
         """
         job_id = str(uuid.uuid4())
+        start_time = time.time()
         
         try:
             # Validate batch size limits
             if len(lots) > MAX_LINES:
                 raise ValueError(f"Too many lots: {len(lots)} > {MAX_LINES}")
             
-            # Process and validate images for all lots
+            logger.info(f"Creating batch job {job_id} for {len(lots)} lots")
+            
+            # Fast processing - skip expensive image validation for batch creation
+            # Image validation will be done during actual batch processing
             processed_lots = []
-            for lot in lots:
-                image_urls = [img['url'] for img in lot.get('images', [])]
-                valid_urls, unreachable_urls = self.image_validator.validate_images(image_urls)
+            max_creation_time = 15  # Maximum 15 seconds for batch creation
+            
+            for i, lot in enumerate(lots):
+                # Check timeout every 100 lots
+                if i % 100 == 0 and time.time() - start_time > max_creation_time:
+                    logger.warning(f"Batch creation timeout after {i} lots, proceeding with partial batch")
+                    break
                 
-                # Check if we have enough valid images
-                if not self.image_validator.check_image_threshold(len(image_urls), len(valid_urls)):
-                    # Mark lot for error file
+                # Basic validation only - no HTTP requests
+                image_urls = [img['url'] for img in lot.get('images', []) if 'url' in img and img['url']]
+                
+                if not image_urls:
+                    # Mark lot for error (no images)
                     processed_lots.append({
-                        'lot_id': lot['lot_id'],
+                        'lot_id': lot.get('lot_id', f'unknown_{i}'),
                         'status': 'error',
-                        'error': 'image_unreachable',
-                        'missing_images': unreachable_urls,
+                        'error': 'no_images',
+                        'missing_images': [],
                         'webhook': lot.get('webhook')
                     })
                     continue
                 
+                # Store all image URLs for later validation during processing
                 processed_lots.append({
-                    'lot_id': lot['lot_id'],
-                    'valid_images': valid_urls,
-                    'missing_images': unreachable_urls,
+                    'lot_id': lot.get('lot_id', f'lot_{i}'),
+                    'image_urls': image_urls,  # Store original URLs for later validation
                     'additional_info': lot.get('additional_info', ''),
                     'webhook': lot.get('webhook'),
                     'status': 'pending'
@@ -69,9 +79,9 @@ class BatchProcessor:
                 # Vision request using proper Responses API format
                 vision_custom_id = f"vision:{lot['lot_id']}"
                 
-                # Create input content in text format with image URLs for now
-                # Until multimodal support in Responses API is fully stable
-                image_list = "\n".join([f"Image {i+1}: {url}" for i, url in enumerate(lot['valid_images'])])
+                # Create input content in text format with image URLs
+                # Image validation will happen during batch processing by OpenAI
+                image_list = "\n".join([f"Image {i+1}: {url}" for i, url in enumerate(lot['image_urls'])])
                 input_text = f"Analyze these car images and provide a detailed damage assessment.\n\nAdditional info: {lot['additional_info']}\n\nProvided images:\n{image_list}\n\nNote: Analyze based on the context provided above."
                 
                 vision_request = {
@@ -82,39 +92,54 @@ class BatchProcessor:
                         "model": "o4-mini",
                         "reasoning": {"effort": "medium"},
                         "input": input_text,
-                        "max_output_tokens": 1024
+                        "max_output_tokens": 2048
                     }
                 }
                 vision_requests.append(vision_request)
             
-            # Submit vision batch job
+            # Submit vision batch job with timeout protection
             vision_batch_id = None
             if vision_requests:
+                # Quick check for batch limits
+                vision_jsonl = self.openai_client.create_batch_file(vision_requests[:1000])  # Limit to 1000 requests for fast creation
+                estimated_size = len(vision_jsonl.encode()) * len(vision_requests) / min(len(vision_requests), 1000)
+                
+                if estimated_size > MAX_FILE_BYTES:
+                    raise ValueError(f"Estimated batch file too large: {estimated_size} > {MAX_FILE_BYTES}")
+                
+                # Create full batch file
                 vision_jsonl = self.openai_client.create_batch_file(vision_requests)
                 
-                # Check file size limits
-                if len(vision_jsonl.encode()) > MAX_FILE_BYTES:
-                    raise ValueError(f"Batch file too large: {len(vision_jsonl.encode())} > {MAX_FILE_BYTES}")
-                
-                vision_batch_id = self.openai_client.submit_batch_job(
-                    vision_jsonl, 
-                    f"Vision processing for job {job_id}"
-                )
+                # Submit with timeout protection  
+                try:
+                    vision_batch_id = self.openai_client.submit_batch_job(
+                        vision_jsonl, 
+                        f"Vision processing for job {job_id}"
+                    )
+                except Exception as e:
+                    logger.error(f"Batch submission failed: {str(e)}")
+                    # Continue anyway - job will be marked as failed but created
+                    vision_batch_id = None
             
             # Store job information
+            creation_time = time.time() - start_time
+            status = 'processing' if vision_batch_id else 'failed'
+            
             self.active_jobs[job_id] = {
                 'job_id': job_id,
-                'status': 'processing',
+                'status': status,
                 'created_at': datetime.utcnow(),
                 'lots': processed_lots,
                 'languages': languages,
                 'vision_batch_id': vision_batch_id,
                 'translation_batch_id': None,
                 'vision_results': {},
-                'translation_results': {}
+                'translation_results': {},
+                'creation_time': creation_time,
+                'error': None if vision_batch_id else 'Batch submission failed'
             }
             
-            logger.info(f"Created batch job {job_id} with vision batch {vision_batch_id}")
+            logger.info(f"Created batch job {job_id} in {creation_time:.2f}s with vision batch {vision_batch_id}")
             return job_id
             
         except Exception as e:

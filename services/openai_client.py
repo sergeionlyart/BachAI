@@ -22,9 +22,9 @@ class OpenAIClient:
         """
         Generate car description using OpenAI o4-mini model via Responses API
         """
+        # Log request start for debugging timeout issues
+        start_time = time.time()
         try:
-            # Log request start for debugging timeout issues
-            start_time = time.time()
             logger.info(f"Starting vision description generation for {len(images)} images")
             
             # Prepare the user prompt with additional context
@@ -81,13 +81,12 @@ class OpenAIClient:
         """
         Translate text to target language using gpt-4.1-mini via Responses API
         """
+        # Log translation start for debugging timeout issues
+        start_time = time.time()
         try:
             # Skip translation if target is English
             if target_language.lower() == 'en':
                 return text
-            
-            # Log translation start for debugging timeout issues
-            start_time = time.time()
             logger.info(f"Starting translation to {target_language}")
             
             # Prepare input for Responses API as simple text

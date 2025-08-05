@@ -1,0 +1,112 @@
+2025-08-05 08:42:05.73
+f6a35e96
+User
+[2025-08-05 06:42:05 +0000] [18] [CRITICAL] WORKER TIMEOUT (pid:27)
+2025-08-05 08:42:05.76
+f6a35e96
+User
+[2025-08-05 06:42:05 +0000] [27] [ERROR] Error handling request /api/v1/generate-descriptions
+2025-08-05 08:42:05.76
+f6a35e96
+User
+Traceback (most recent call last):
+2025-08-05 08:42:05.76
+f6a35e96
+User
+File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/gunicorn/workers/sync.py", line 134, in handle
+2025-08-05 08:42:05.76
+f6a35e96
+User
+self.handle_request(listener, req, client, addr)
+2025-08-05 08:42:05.76
+f6a35e96
+User
+File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/gunicorn/workers/sync.py", line 177, in handle_request
+2025-08-05 08:42:05.76
+f6a35e96
+User
+respiter = self.wsgi(environ, resp.start_response)
+2025-08-05 08:42:05.76
+f6a35e96
+User
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2025-08-05 08:42:05.76
+f6a35e96
+User
+File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/flask/app.py", line 1536, in __call__
+2025-08-05 08:42:05.76
+f6a35e96
+User
+return self.wsgi_app(environ, start_response)
+2025-08-05 08:42:05.76
+f6a35e96
+User
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2025-08-05 08:42:05.76
+f6a35e96
+User
+File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/werkzeug/middleware/proxy_fix.py", line 183, in __call__
+2025-08-05 08:42:05.76
+f6a35e96
+User
+return self.app(environ, start_response)
+2025-08-05 08:42:05.76
+f6a35e96
+User
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2025-08-05 08:42:05.76
+f6a35e96
+User
+File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/flask/app.py", line 1511, in wsgi_app
+2025-08-05 08:42:05.76
+f6a35e96
+User
+response = self.full_dispatch_request()
+2025-08-05 08:42:05.76
+f6a35e96
+User
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2025-08-05 08:42:05.76
+f6a35e96
+User
+File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/flask/app.py", line 917, in full_dispatch_request
+2025-08-05 08:42:05.76
+f6a35e96
+User
+rv = self.dispatch_request()
+2025-08-05 08:42:05.76
+f6a35e96
+User
+^^^^^^^^^^^^^^^^^^^^^^^
+2025-08-05 08:42:05.76
+f6a35e96
+User
+File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/flask/app.py", line 902, in dispatch_request
+2025-08-05 08:42:05.76
+f6a35e96
+User
+return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args) # type: ignore[no-any-return]
+2025-08-05 08:42:05.76
+f6a35e96
+User
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2025-08-05 08:42:05.76
+f6a35e96
+User
+File "/home/runner/workspace/routes/api.py", line 66, in generate_descriptions
+2025-08-05 08:42:05.76
+f6a35e96
+User
+return handle_batch_request(lots, languages)
+2025-08-05 08:42:05.76
+f6a35e96
+User
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2025-08-05 08:42:05.76
+f6a35e96
+User
+File "/home/runner/workspace/routes/api.py", line 184, in handle_batch_request
+2025-08-05 08:42:05.76
+f6a35e96
+User
+job_id = batch_processor.create_batch_job(lots, languages)
