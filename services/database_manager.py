@@ -112,10 +112,14 @@ class DatabaseManager:
     def get_active_batch_jobs(self):
         """
         Get all active batch jobs that need monitoring
+        Also includes failed jobs that might have completed OpenAI batches
         """
         try:
             return self.session.query(BatchJob).filter(
-                BatchJob.status.in_(['pending', 'processing'])
+                BatchJob.status.in_(['pending', 'processing', 'failed'])
+            ).filter(
+                (BatchJob.openai_vision_batch_id.isnot(None)) | 
+                (BatchJob.openai_translation_batch_id.isnot(None))
             ).all()
         except SQLAlchemyError as e:
             logger.error(f"Database error getting active batch jobs: {str(e)}")

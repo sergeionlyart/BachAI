@@ -71,12 +71,12 @@ class BatchMonitor:
         try:
             job_id = str(job.id)
             
-            # Check vision batch status
-            if job.openai_vision_batch_id and job.status == 'processing':
+            # Check vision batch status (including failed jobs with completed OpenAI batches)
+            if job.openai_vision_batch_id and job.status in ['processing', 'failed']:
                 self._check_vision_batch(job)
             
             # Check translation batch status
-            elif job.openai_translation_batch_id and job.status == 'translating':
+            elif job.openai_translation_batch_id and job.status in ['translating', 'failed']:
                 self._check_translation_batch(job)
                 
         except Exception as e:
@@ -90,7 +90,13 @@ class BatchMonitor:
             batch_status = self.openai_client.get_batch_status(job.openai_vision_batch_id)
             
             if batch_status['status'] == 'completed':
-                logger.info(f"Vision batch completed for job {job.id}")
+                logger.info(f"Vision batch completed for job {job.id} (was {job.status})")
+                # Reset job status to processing for successful recovery
+                if job.status == 'failed':
+                    self.db_manager.update_batch_job_status(str(job.id), 'processing')
+                    job.status = 'processing'  # Update local object
+                    logger.info(f"Recovered failed job {job.id} - OpenAI batch completed successfully")
+                
                 self._process_vision_results(job, batch_status)
                 
             elif batch_status['status'] == 'failed':
