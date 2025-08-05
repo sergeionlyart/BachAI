@@ -8,7 +8,7 @@ from services.database_manager import DatabaseManager
 from services.batch_monitor import BatchMonitor
 from services.webhook_sender import WebhookSender
 from database.models import db, BatchJob
-from config import SHARED_KEY
+
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +65,7 @@ class BackgroundWorker:
                         # Initialize services within app context
                         db_manager = DatabaseManager(db.session)
                         batch_monitor = BatchMonitor()
-                        webhook_sender = WebhookSender(SHARED_KEY)
+                        webhook_sender = WebhookSender(db.session)
                         
                         # Monitor active batch jobs
                         self._monitor_batch_jobs(db_manager, batch_monitor)
