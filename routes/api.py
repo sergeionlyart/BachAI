@@ -112,21 +112,36 @@ def handle_sync_request(lot, languages):
         ]
         
         # Generate translations for other languages
-        for lang in languages:
-            if lang.lower() != 'en':
-                try:
-                    translated_text = openai_client.translate_text(english_description, lang)
-                    descriptions.append({
-                        "language": lang,
-                        "damages": f"<p>{translated_text}</p>"
-                    })
-                except Exception as e:
-                    logger.error(f"Translation failed for {lang}: {str(e)}")
-                    # Use English as fallback
-                    descriptions.append({
-                        "language": lang,
-                        "damages": f"<p>{english_description}</p>"
-                    })
+        # Process translations in parallel to avoid timeouts
+        import concurrent.futures
+        import threading
+        
+        translation_languages = [lang for lang in languages if lang.lower() != 'en']
+        
+        if translation_languages:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(translation_languages), 5)) as executor:
+                # Submit all translation tasks
+                future_to_lang = {
+                    executor.submit(openai_client.translate_text, english_description, lang): lang 
+                    for lang in translation_languages
+                }
+                
+                # Collect results
+                for future in concurrent.futures.as_completed(future_to_lang, timeout=45):
+                    lang = future_to_lang[future]
+                    try:
+                        translated_text = future.result()
+                        descriptions.append({
+                            "language": lang,
+                            "damages": f"<p>{translated_text}</p>"
+                        })
+                    except Exception as e:
+                        logger.error(f"Translation failed for {lang}: {str(e)}")
+                        # Use English as fallback
+                        descriptions.append({
+                            "language": lang,
+                            "damages": f"<p>{english_description}</p>"
+                        })
         
         # Prepare response
         response = {
