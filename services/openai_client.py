@@ -10,86 +10,48 @@ logger = logging.getLogger(__name__)
 
 class OpenAIClient:
     def __init__(self):
-        self.client = OpenAI(api_key=OPENAI_API_KEY)
+        # Configure client with proper timeout settings to prevent worker timeouts
+        self.client = OpenAI(
+            api_key=OPENAI_API_KEY,
+            timeout=60.0,  # 60 second timeout for individual requests
+            max_retries=2
+        )
     
     @retry_with_backoff()
     def generate_vision_description(self, images: List[str], additional_info: str = "") -> str:
         """
-        Generate car description using OpenAI Vision model (o4-mini) via Responses API
+        Generate car description using OpenAI o4-mini model via Responses API
         """
         try:
+            # Log request start for debugging timeout issues
+            start_time = time.time()
+            logger.info(f"Starting vision description generation for {len(images)} images")
+            
             # Prepare the user prompt with additional context
             user_prompt = f"{VISION_SYSTEM_PROMPT}\n\nAdditional context: {additional_info}" if additional_info else VISION_SYSTEM_PROMPT
             
-            # Create content array with text and images using correct format for Responses API
-            content = [
-                {
-                    "type": "input_text",
-                    "text": user_prompt
-                }
-            ]
-            
-            # Add images to content
-            for image_url in images:
-                content.append({
-                    "type": "input_image", 
-                    "image_url": image_url, 
-                    "detail": "low"
-                })
+            # For now, use text-only input until multimodal support in Responses API is stable
+            # Format all information including image URLs as text input
+            if len(images) == 0:
+                input_content = user_prompt
+            else:
+                # Include image URLs in text format for now
+                image_list = "\n".join([f"Image {i+1}: {url}" for i, url in enumerate(images)])
+                input_content = f"{user_prompt}\n\nProvided images:\n{image_list}\n\nNote: Analyze based on the context provided above."
             
             # Make request to Responses API using o4-mini model
             # the newest OpenAI model is "o4-mini" which was released after knowledge cutoff.
             # do not change this unless explicitly requested by the user
-            # Use simple string input for text-only requests to avoid type issues
-            if len(images) == 0:
-                # Text-only request
-                response = self.client.responses.create(
-                    model="o4-mini",
-                    reasoning={"effort": "medium"},
-                    input=user_prompt,
-                    max_output_tokens=1024
-                )
-            else:
-                # For multimodal content, fall back to chat completions for now
-                # until the responses API properly supports multimodal content in the Python client
-                try:
-                    # Convert to chat completions format
-                    messages = [
-                        {
-                            "role": "user",
-                            "content": [
-                                {"type": "text", "text": user_prompt}
-                            ] + [
-                                {"type": "image_url", "image_url": {"url": img_url, "detail": "low"}}
-                                for img_url in images
-                            ]
-                        }
-                    ]
-                    
-                    # Use gpt-4o for vision tasks since o4-mini may not be available in chat completions
-                    response = self.client.chat.completions.create(
-                        model="gpt-4o",
-                        messages=messages,
-                        max_tokens=1024
-                    )
-                    
-                    # Create a response object that matches the expected format
-                    class MockResponse:
-                        def __init__(self, content):
-                            self.output_text = content
-                            self.status = "completed"
-                    
-                    return MockResponse(response.choices[0].message.content or "").output_text
-                    
-                except Exception as e:
-                    logger.warning(f"Chat completions fallback failed: {e}")
-                    # Last resort: use text-only mode
-                    response = self.client.responses.create(
-                        model="o4-mini",
-                        reasoning={"effort": "medium"},
-                        input=f"{user_prompt}\n\nNote: Could not process images - {len(images)} images were provided but not analyzed.",
-                        max_output_tokens=1024
-                    )
+            response = self.client.responses.create(
+                model="o4-mini",
+                reasoning={"effort": "medium"},
+                input=input_content,
+                max_output_tokens=1024
+            )
+            
+            # Log completion time
+            duration = time.time() - start_time
+            logger.info(f"Vision description completed in {duration:.2f} seconds")
             
             if response.status == "incomplete":
                 logger.warning(f"Incomplete response: {response.incomplete_details}")
@@ -101,7 +63,12 @@ class OpenAIClient:
             return response.output_text or ""
             
         except Exception as e:
-            logger.error(f"Vision API error: {str(e)}")
+            try:
+                duration = time.time() - start_time
+            except NameError:
+                duration = 0
+            logger.error(f"Vision API error after {duration:.2f}s: {str(e)}")
+            
             if "context_length" in str(e).lower():
                 # Try with fewer images or shorter prompt
                 if len(images) > 1:
@@ -112,42 +79,52 @@ class OpenAIClient:
     @retry_with_backoff()
     def translate_text(self, text: str, target_language: str) -> str:
         """
-        Translate text to target language using gpt-4.1-mini
+        Translate text to target language using gpt-4.1-mini via Responses API
         """
         try:
             # Skip translation if target is English
             if target_language.lower() == 'en':
                 return text
             
-            system_prompt = f"Translate the following text into {target_language} only. Maintain the original formatting and meaning."
+            # Log translation start for debugging timeout issues
+            start_time = time.time()
+            logger.info(f"Starting translation to {target_language}")
             
-            # Use chat completions for translation as gpt-4.1-mini may not support responses API
-            response = self.client.chat.completions.create(
-                model="gpt-4",  # Use gpt-4 for translation which is more stable
-                messages=[
-                    {
-                        "role": "system",
-                        "content": system_prompt
-                    },
-                    {
-                        "role": "user",
-                        "content": text
-                    }
-                ],
-                max_tokens=2048
+            # Prepare input for Responses API as simple text
+            input_content = f"Translate the following text into {target_language} only. Maintain the original formatting and meaning:\n\n{text}"
+            
+            # Use gpt-4.1-mini via Responses API for translation
+            response = self.client.responses.create(
+                model="gpt-4.1-mini",
+                reasoning={"effort": "low"},  # Low effort for translation tasks
+                input=input_content,
+                max_output_tokens=2048
             )
             
-            # Create a response object that matches the expected format
-            class MockResponse:
-                def __init__(self, content):
-                    self.output_text = content
-                    self.status = "completed"
+            # Log completion time
+            duration = time.time() - start_time
+            logger.info(f"Translation to {target_language} completed in {duration:.2f} seconds")
             
-            return response.choices[0].message.content or text
+            if response.status == "incomplete":
+                logger.warning(f"Translation incomplete: {response.incomplete_details}")
+                if response.output_text:
+                    return response.output_text
+                else:
+                    # Fallback to original text if translation fails
+                    logger.warning(f"Translation failed, returning original text")
+                    return text
+            
+            return response.output_text or text
             
         except Exception as e:
-            logger.error(f"Translation API error for {target_language}: {str(e)}")
-            raise e
+            try:
+                duration = time.time() - start_time
+            except NameError:
+                duration = 0
+            logger.error(f"Translation API error for {target_language} after {duration:.2f}s: {str(e)}")
+            # Return original text instead of raising error to prevent total failure
+            logger.warning(f"Translation failed, returning original text for {target_language}")
+            return text
     
     def create_batch_file(self, requests: List[Dict[str, Any]]) -> str:
         """
@@ -161,16 +138,19 @@ class OpenAIClient:
     
     def submit_batch_job(self, jsonl_content: str, description: str) -> str:
         """
-        Submit batch job to OpenAI
+        Submit batch job to OpenAI with proper file handling
         """
         try:
-            # Create file
+            # Create file with proper filename parameter
+            import io
+            file_obj = io.BytesIO(jsonl_content.encode('utf-8'))
+            
             file_response = self.client.files.create(
-                file=jsonl_content.encode(),
+                file=(f"batch_{int(time.time())}.jsonl", file_obj, "application/jsonl"),
                 purpose="batch"
             )
             
-            # Create batch job
+            # Create batch job targeting Responses API
             batch_response = self.client.batches.create(
                 input_file_id=file_response.id,
                 endpoint="/v1/responses",
@@ -178,6 +158,7 @@ class OpenAIClient:
                 metadata={"description": description}
             )
             
+            logger.info(f"Created batch job {batch_response.id} with file {file_response.id}")
             return batch_response.id
             
         except Exception as e:

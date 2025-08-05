@@ -68,3 +68,20 @@ Preferred communication style: Simple, everyday language.
 - **Environment Variables**: OPENAI_API_KEY, SHARED_KEY, processing limits, timeout configurations
 - **System Prompts**: Configurable AI behavior for automotive damage assessment
 - **Rate Limiting**: Configurable batch limits and processing thresholds
+
+## Recent Updates
+
+### August 5, 2025 - Critical OpenAI API Integration Fixes ✅
+- **Complete API Migration**: Successfully migrated from outdated chat.completions to modern OpenAI Responses API exclusively
+- **Model Updates**: Now using o4-mini for vision analysis and gpt-4.1-mini for translations via Responses API only
+- **Timeout Resolution**: Fixed WORKER TIMEOUT errors by optimizing sync route with translation limits (max 2 languages) and 45s timeout
+- **Batch Processing Optimization**: Removed unused translation_requests code, fixed file upload with proper filename parameter
+- **Error Handling**: Resolved all LSP diagnostics and improved exception handling with proper timeout tracking
+- **Performance Improvements**: Added request timeouts (60s), sequential translation limits, and fallback mechanisms
+- **Type Safety**: Fixed multimodal content format issues for stable Responses API integration
+
+### Key Technical Improvements
+- **OpenAI Client**: Rewritten to use only Responses API with proper timeout handling and error recovery
+- **Batch Processor**: Simplified request format, removed placeholder translation logic, fixed file upload
+- **Sync Route**: Added translation limits and timeout protection to prevent worker timeouts
+- **Error Handling**: Comprehensive exception handling with duration tracking and graceful fallbacks

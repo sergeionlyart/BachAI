@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 from flask import Blueprint, request, jsonify
 from services.openai_client import OpenAIClient
 from services.image_validator import ImageValidator
@@ -111,22 +112,47 @@ def handle_sync_request(lot, languages):
             {"language": "en", "damages": f"<p>{english_description}</p>"}
         ]
         
-        # Generate translations for other languages
-        for lang in languages:
-            if lang.lower() != 'en':
-                try:
-                    translated_text = openai_client.translate_text(english_description, lang)
+        # Optimize translations to prevent worker timeout
+        # Limit number of languages in sync mode to prevent timeout
+        non_english_languages = [lang for lang in languages if lang.lower() != 'en']
+        
+        # In sync mode, limit to maximum 2 additional languages to prevent timeout
+        max_sync_translations = 2
+        if len(non_english_languages) > max_sync_translations:
+            logger.warning(f"Too many languages for sync mode ({len(non_english_languages)}), limiting to {max_sync_translations}")
+            non_english_languages = non_english_languages[:max_sync_translations]
+        
+        # Generate translations with timeout protection
+        translation_start = time.time()
+        max_translation_time = 45  # Maximum 45 seconds for all translations
+        
+        for lang in non_english_languages:
+            # Check if we're running out of time
+            elapsed = time.time() - translation_start
+            if elapsed > max_translation_time:
+                logger.warning(f"Translation timeout reached, skipping remaining languages")
+                # Add English fallback for remaining languages
+                for remaining_lang in [l for l in non_english_languages if l not in [desc['language'] for desc in descriptions]]:
                     descriptions.append({
-                        "language": lang,
-                        "damages": f"<p>{translated_text}</p>"
-                    })
-                except Exception as e:
-                    logger.error(f"Translation failed for {lang}: {str(e)}")
-                    # Use English as fallback
-                    descriptions.append({
-                        "language": lang,
+                        "language": remaining_lang,
                         "damages": f"<p>{english_description}</p>"
                     })
+                break
+            
+            try:
+                # Set shorter timeout for individual translation
+                translated_text = openai_client.translate_text(english_description, lang)
+                descriptions.append({
+                    "language": lang,
+                    "damages": f"<p>{translated_text}</p>"
+                })
+            except Exception as e:
+                logger.error(f"Translation failed for {lang}: {str(e)}")
+                # Use English as fallback
+                descriptions.append({
+                    "language": lang,
+                    "damages": f"<p>{english_description}</p>"
+                })
         
         # Prepare response
         response = {

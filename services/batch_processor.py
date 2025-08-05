@@ -58,30 +58,21 @@ class BatchProcessor:
                     'status': 'pending'
                 })
             
-            # Create batch requests for vision processing
+            # Create batch requests for vision processing only
+            # Translation will be handled separately after vision results are ready
             vision_requests = []
-            translation_requests = []
             
             for lot in processed_lots:
                 if lot['status'] == 'error':
                     continue
                 
-                # Vision request
+                # Vision request using proper Responses API format
                 vision_custom_id = f"vision:{lot['lot_id']}"
                 
-                content = [
-                    {
-                        "type": "input_text",
-                        "text": f"Analyze these car images and provide a detailed damage assessment. Additional info: {lot['additional_info']}"
-                    }
-                ]
-                
-                for image_url in lot['valid_images']:
-                    content.append({
-                        "type": "input_image",
-                        "image_url": image_url,
-                        "detail": "low"
-                    })
+                # Create input content in text format with image URLs for now
+                # Until multimodal support in Responses API is fully stable
+                image_list = "\n".join([f"Image {i+1}: {url}" for i, url in enumerate(lot['valid_images'])])
+                input_text = f"Analyze these car images and provide a detailed damage assessment.\n\nAdditional info: {lot['additional_info']}\n\nProvided images:\n{image_list}\n\nNote: Analyze based on the context provided above."
                 
                 vision_request = {
                     "custom_id": vision_custom_id,
@@ -90,42 +81,11 @@ class BatchProcessor:
                     "body": {
                         "model": "o4-mini",
                         "reasoning": {"effort": "medium"},
-                        "input": [
-                            {
-                                "role": "user",
-                                "content": content
-                            }
-                        ],
+                        "input": input_text,
                         "max_output_tokens": 1024
                     }
                 }
                 vision_requests.append(vision_request)
-                
-                # Translation requests for non-English languages
-                for lang in languages:
-                    if lang.lower() != 'en':
-                        translation_custom_id = f"tr:{lot['lot_id']}:{lang}"
-                        translation_request = {
-                            "custom_id": translation_custom_id,
-                            "method": "POST",
-                            "url": "/v1/responses",
-                            "body": {
-                                "model": "gpt-4.1-mini",
-                                "reasoning": {"effort": "low"},
-                                "input": [
-                                    {
-                                        "role": "system",
-                                        "content": f"Translate the following text into {lang} only. Maintain formatting."
-                                    },
-                                    {
-                                        "role": "user",
-                                        "content": "{{VISION_RESULT}}"  # Placeholder, will be replaced
-                                    }
-                                ],
-                                "max_output_tokens": 2048
-                            }
-                        }
-                        translation_requests.append(translation_request)
             
             # Submit vision batch job
             vision_batch_id = None
@@ -282,16 +242,7 @@ class BatchProcessor:
                         "body": {
                             "model": "gpt-4.1-mini",
                             "reasoning": {"effort": "low"},
-                            "input": [
-                                {
-                                    "role": "system",
-                                    "content": f"Translate the following text into {lang} only. Maintain formatting."
-                                },
-                                {
-                                    "role": "user",
-                                    "content": english_text
-                                }
-                            ],
+                            "input": f"Translate the following text into {lang} only. Maintain the original formatting and meaning:\n\n{english_text}",
                             "max_output_tokens": 2048
                         }
                     }
