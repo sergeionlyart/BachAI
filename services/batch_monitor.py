@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from services.openai_client import OpenAIClient
 from services.database_manager import DatabaseManager
 from services.webhook_sender import WebhookSender
-from database.models import db
+from database.models import db, BatchLot
 
 logger = logging.getLogger(__name__)
 
@@ -173,6 +173,13 @@ class BatchMonitor:
     def _save_vision_results(self, job, vision_results: list):
         """Save vision results to database"""
         try:
+            # Get all lots for this job
+            lots = self.db_manager.session.query(BatchLot).filter(
+                BatchLot.batch_job_id == job.id
+            ).all()
+            
+            lot_map = {lot.lot_id: lot for lot in lots}
+            
             for result in vision_results:
                 if not isinstance(result, dict):
                     continue
@@ -188,30 +195,53 @@ class BatchMonitor:
                 
                 lot_id = parts[2]
                 response_data = result.get('response', {})
+                
+                # Extract vision text from response
+                vision_text = ''
                 if isinstance(response_data, dict):
                     body = response_data.get('body', {})
                     if isinstance(body, dict):
                         choices = body.get('choices', [{}])
                         if choices and len(choices) > 0:
                             vision_text = choices[0].get('message', {}).get('content', '')
-                        else:
-                            vision_text = ''
-                    else:
-                        vision_text = ''
-                else:
-                    vision_text = str(response_data)
                 
-                if vision_text:
-                    # For now, store results directly in job (we'll add proper DB methods later)
-                    logger.info(f"Vision result received for lot {lot_id}: {len(vision_text)} characters")
+                # Update lot with vision result
+                if lot_id in lot_map and vision_text:
+                    lot = lot_map[lot_id]
+                    lot.vision_result = vision_text
+                    lot.status = 'processing'  # Will be completed after translations
+                    lot.updated_at = datetime.utcnow()
+                    logger.info(f"Vision result saved for lot {lot_id}: {len(vision_text)} characters")
+                elif lot_id in lot_map:
+                    lot = lot_map[lot_id]
+                    lot.status = 'failed'
+                    lot.error_message = 'No vision result in response'
+                    lot.updated_at = datetime.utcnow()
+                    logger.error(f"No vision result for lot {lot_id}")
+            
+            # Update job progress
+            job.processed_lots = len([lot for lot in lots if lot.vision_result])
+            job.updated_at = datetime.utcnow()
+            
+            # Commit changes
+            self.db_manager.session.commit()
+            logger.info(f"Saved vision results for job {job.id}")
                     
         except Exception as e:
+            self.db_manager.session.rollback()
             logger.error(f"Error saving vision results: {str(e)}")
             raise
     
     def _save_translation_results(self, job, translation_results: list):
         """Save translation results to database"""
         try:
+            # Get all lots for this job
+            lots = self.db_manager.session.query(BatchLot).filter(
+                BatchLot.batch_job_id == job.id
+            ).all()
+            
+            lot_map = {lot.lot_id: lot for lot in lots}
+            
             for result in translation_results:
                 if not isinstance(result, dict):
                     continue
@@ -228,33 +258,73 @@ class BatchMonitor:
                 lot_id = parts[2]
                 language = parts[3]
                 response_data = result.get('response', {})
+                
+                # Extract translated text from response
+                translated_text = ''
                 if isinstance(response_data, dict):
                     body = response_data.get('body', {})
                     if isinstance(body, dict):
                         choices = body.get('choices', [{}])
                         if choices and len(choices) > 0:
                             translated_text = choices[0].get('message', {}).get('content', '')
-                        else:
-                            translated_text = ''
-                    else:
-                        translated_text = ''
-                else:
-                    translated_text = str(response_data)
                 
-                if translated_text:
-                    # For now, store results directly in job (we'll add proper DB methods later)
-                    logger.info(f"Translation result received for lot {lot_id} in {language}: {len(translated_text)} characters")
+                # Update lot with translation
+                if lot_id in lot_map and translated_text:
+                    lot = lot_map[lot_id]
+                    if not lot.translations:
+                        lot.translations = {}
+                    lot.translations[language] = translated_text
+                    lot.updated_at = datetime.utcnow()
+                    logger.info(f"Translation saved for lot {lot_id} in {language}: {len(translated_text)} characters")
+            
+            # Mark all lots as completed
+            for lot in lots:
+                if lot.vision_result:  # Only mark as completed if has vision result
+                    lot.status = 'completed'
+            
+            # Update job to reflect completion
+            job.processed_lots = len([lot for lot in lots if lot.status == 'completed'])
+            job.failed_lots = len([lot for lot in lots if lot.status == 'failed'])
+            job.updated_at = datetime.utcnow()
+            
+            # Commit changes
+            self.db_manager.session.commit()
+            logger.info(f"Saved translation results for job {job.id}")
                     
         except Exception as e:
+            self.db_manager.session.rollback()
             logger.error(f"Error saving translation results: {str(e)}")
             raise
     
     def _finalize_job_results(self, job):
         """Create final API format results"""
         try:
-            # For now, just log that finalization is happening
-            # TODO: Implement proper result finalization when database methods are ready
-            logger.info(f"Finalizing results for job {job.id}")
+            # Get all lots for this job
+            lots = self.db_manager.session.query(BatchLot).filter(
+                BatchLot.batch_job_id == job.id
+            ).all()
+            
+            # Build results structure
+            results_data = {
+                'job_id': str(job.id),
+                'status': 'completed',
+                'lots': []
+            }
+            
+            for lot in lots:
+                lot_result = {
+                    'lot_id': lot.lot_id,
+                    'status': lot.status,
+                    'vision_result': lot.vision_result,
+                    'translations': lot.translations or {},
+                    'error_message': lot.error_message,
+                    'missing_images': lot.missing_images
+                }
+                results_data['lots'].append(lot_result)
+            
+            # Save results using database manager
+            self.db_manager.save_batch_results(str(job.id), results_data)
+            logger.info(f"Finalized results for job {job.id} with {len(lots)} lots")
             
         except Exception as e:
             logger.error(f"Error finalizing job results: {str(e)}")
