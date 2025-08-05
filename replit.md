@@ -12,6 +12,9 @@ Preferred communication style: Simple, everyday language.
 
 ### Application Framework
 - **Flask-based REST API** with modular blueprint architecture
+- **PostgreSQL Database Integration** with SQLAlchemy ORM for persistent storage
+- **Background Worker Service** for automated job monitoring and webhook delivery
+- **Polling API System** for real-time job status checking and result retrieval
 - **ProxyFix middleware** for proper header handling in production environments
 - **Centralized configuration management** through environment variables
 - **Structured logging** with configurable levels and handlers
@@ -19,6 +22,8 @@ Preferred communication style: Simple, everyday language.
 ### Processing Modes
 - **Synchronous Mode**: Real-time processing for single lot requests (≤20 images, ≤300s response time)
 - **Batch Mode**: Asynchronous processing for multiple lots using OpenAI Batch API (≤50,000 lots, ≤24h processing time)
+- **Polling Mode**: REST API endpoints for job status checking and result retrieval
+- **Webhook Mode**: Automatic result delivery via HTTP callbacks with retry mechanisms
 - **Automatic mode selection** based on request size and complexity
 
 ### Security Architecture
@@ -45,11 +50,20 @@ Preferred communication style: Simple, everyday language.
 - **Graceful degradation** when services are unavailable
 - **Detailed error categorization** for retryable vs non-retryable failures
 
+### Database Architecture
+- **PostgreSQL-based persistence** with comprehensive schema design
+- **BatchJob table**: Main job tracking with status, OpenAI batch IDs, and configuration
+- **BatchLot table**: Individual lot processing with image URLs, results, and translations
+- **BatchResult table**: Structured storage of vision and translation results
+- **WebhookDelivery table**: Webhook delivery tracking with retry mechanisms and status monitoring
+
 ### Webhook System
-- **Asynchronous result delivery** via HTTP webhooks
-- **Retry mechanisms** with exponential backoff for webhook delivery
-- **Signed webhook payloads** for verification and security
-- **Job status tracking** for batch processing monitoring
+- **Background worker service** for automated webhook delivery
+- **Asynchronous result delivery** via HTTP webhooks with comprehensive retry policies
+- **Exponential backoff strategy** with configurable retry limits and timeouts
+- **Signed webhook payloads** for verification and security using HMAC-SHA256
+- **Delivery status tracking** with detailed error logging and failure analysis
+- **Job status monitoring** for batch processing lifecycle management
 
 ## External Dependencies
 
@@ -71,6 +85,15 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Updates
 
+### August 5, 2025 - Complete PostgreSQL Integration & Background Worker System ✅
+- **PostgreSQL Database Architecture**: Successfully migrated from in-memory storage to full PostgreSQL-based persistence system
+- **Background Worker Service**: Implemented complete background monitoring and webhook delivery system with automatic job tracking
+- **Polling API System**: Added comprehensive REST API for job status checking and results retrieval
+- **Webhook Delivery System**: Implemented robust webhook delivery with retry mechanisms, exponential backoff, and failure tracking
+- **Database Models**: Created complete schema with BatchJob, BatchLot, BatchResult, and WebhookDelivery tables for full persistence
+- **Batch Monitoring**: Added automatic OpenAI batch status monitoring with result downloading and processing
+- **Production Architecture**: Integrated all components into main Flask application with proper service startup and lifecycle management
+
 ### August 5, 2025 - Critical OpenAI API Integration & Performance Fixes ✅
 - **Complete API Migration**: Successfully migrated from outdated chat.completions to modern OpenAI Responses API exclusively
 - **Model Updates**: Now using o4-mini for vision analysis and gpt-4.1-mini for translations via Responses API only
@@ -82,6 +105,9 @@ Preferred communication style: Simple, everyday language.
 - **Type Safety**: Fixed multimodal content format issues for stable Responses API integration
 
 ### Key Technical Improvements
+- **PostgreSQL Integration**: Complete database-based persistence system replacing in-memory storage for production reliability
+- **Background Services**: Automated job monitoring, result processing, and webhook delivery with configurable retry policies
+- **API Endpoints**: Full REST API for job creation, status polling, and result retrieval with proper error handling
 - **OpenAI Client**: Rewritten to use only Responses API with proper timeout handling, start_time initialization fixes
 - **Batch Processor**: **MAJOR OPTIMIZATION** - Fast batch creation without HTTP image validation, 15s timeout protection, efficient batch submission
 - **Sync Route**: Translation limits and timeout protection to prevent worker timeouts

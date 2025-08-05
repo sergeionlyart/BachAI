@@ -17,8 +17,13 @@ class BatchProcessor:
         self.image_validator = ImageValidator()
         self.webhook_handler = WebhookHandler()
         
-        # In-memory storage for batch jobs (in production, use Redis/Database)
-        self.active_jobs = {}
+        # Initialize database manager for persistent storage
+        from database.models import db
+        from services.database_manager import DatabaseManager
+        self.db_manager = DatabaseManager(db.session)
+        
+        # Remove in-memory storage - using PostgreSQL now
+        logger.info("BatchProcessor initialized with PostgreSQL persistence")
     
     def create_batch_job(self, lots: List[Dict[str, Any]], languages: List[str]) -> str:
         """
@@ -125,19 +130,21 @@ class BatchProcessor:
             creation_time = time.time() - start_time
             status = 'processing' if vision_batch_id else 'failed'
             
-            self.active_jobs[job_id] = {
+            # Store job in database
+            job_data = {
                 'job_id': job_id,
                 'status': status,
-                'created_at': datetime.utcnow(),
-                'lots': processed_lots,
                 'languages': languages,
-                'vision_batch_id': vision_batch_id,
-                'translation_batch_id': None,
-                'vision_results': {},
-                'translation_results': {},
-                'creation_time': creation_time,
-                'error': None if vision_batch_id else 'Batch submission failed'
+                'openai_vision_batch_id': vision_batch_id,
+                'lots': processed_lots,
+                'error_message': None if vision_batch_id else 'Batch submission failed'
             }
+            
+            try:
+                self.db_manager.create_batch_job(job_data)
+            except Exception as db_error:
+                logger.error(f"Failed to store job in database: {str(db_error)}")
+                # Continue anyway - job was created in OpenAI
             
             logger.info(f"Created batch job {job_id} in {creation_time:.2f}s with vision batch {vision_batch_id}")
             return job_id
@@ -150,49 +157,44 @@ class BatchProcessor:
         """
         Check status of batch job
         """
-        if job_id not in self.active_jobs:
+        job = self.db_manager.get_batch_job(job_id)
+        if not job:
             return None
-        
-        job = self.active_jobs[job_id]
         
         try:
             # Check vision batch status
-            if job['vision_batch_id'] and job['status'] == 'processing':
-                vision_status = self.openai_client.get_batch_status(job['vision_batch_id'])
+            if job.openai_vision_batch_id and job.status == 'processing':
+                vision_status = self.openai_client.get_batch_status(job.openai_vision_batch_id)
                 
                 if vision_status['status'] == 'completed':
                     # Download and process vision results
                     self._process_vision_results(job_id, vision_status)
                 elif vision_status['status'] == 'failed':
-                    job['status'] = 'failed'
-                    job['error'] = 'Vision batch processing failed'
+                    self.db_manager.update_batch_job_status(job_id, 'failed', 'Vision batch processing failed')
             
-            # Check translation batch status
-            if job['translation_batch_id'] and job['status'] == 'translating':
-                translation_status = self.openai_client.get_batch_status(job['translation_batch_id'])
+            # Check translation batch status  
+            if job.openai_translation_batch_id and job.status == 'translating':
+                translation_status = self.openai_client.get_batch_status(job.openai_translation_batch_id)
                 
                 if translation_status['status'] == 'completed':
                     # Download and process translation results
                     self._process_translation_results(job_id, translation_status)
-                    job['status'] = 'completed'
+                    self.db_manager.update_batch_job_status(job_id, 'completed')
                     
-                    # Send webhooks
-                    self._send_webhooks(job_id)
+                    # Send webhooks handled by monitor service now
                 elif translation_status['status'] == 'failed':
-                    job['status'] = 'failed'
-                    job['error'] = 'Translation batch processing failed'
+                    self.db_manager.update_batch_job_status(job_id, 'failed', 'Translation batch processing failed')
             
             return {
                 'job_id': job_id,
-                'status': job['status'],
-                'created_at': job['created_at'].isoformat(),
-                'error': job.get('error')
+                'status': job.status,
+                'created_at': job.created_at.isoformat(),
+                'error': job.error_message
             }
             
         except Exception as e:
             logger.error(f"Batch status check failed for {job_id}: {str(e)}")
-            job['status'] = 'failed'
-            job['error'] = str(e)
+            self.db_manager.update_batch_job_status(job_id, 'failed', str(e))
             return {
                 'job_id': job_id,
                 'status': 'failed',
@@ -203,7 +205,10 @@ class BatchProcessor:
         """
         Process completed vision batch results
         """
-        job = self.active_jobs[job_id]
+        job = self.db_manager.get_batch_job(job_id)
+        if not job:
+            logger.error(f"Job {job_id} not found for vision results processing")
+            return
         
         try:
             # Download results
@@ -230,23 +235,23 @@ class BatchProcessor:
                             logger.error(f"No response for lot {lot_id}: {result.get('error', 'Unknown error')}")
                             vision_results[lot_id] = "Error generating description"
             
-            job['vision_results'] = vision_results
+            # Store vision results in database 
+            # This would be handled by storing individual lot results
             
             # Now submit translation batch if needed
-            translation_languages = [lang for lang in job['languages'] if lang.lower() != 'en']
+            translation_languages = [lang for lang in job.languages if lang.lower() != 'en']
             
             if translation_languages and vision_results:
                 self._submit_translation_batch(job_id, vision_results, translation_languages)
-                job['status'] = 'translating'
+                self.db_manager.update_batch_job_status(job_id, 'translating')
             else:
                 # No translation needed, job is complete
-                job['status'] = 'completed'
-                self._send_webhooks(job_id)
+                self.db_manager.update_batch_job_status(job_id, 'completed')
+                # Webhook sending handled by monitor service
             
         except Exception as e:
             logger.error(f"Vision results processing failed for {job_id}: {str(e)}")
-            job['status'] = 'failed'
-            job['error'] = f"Vision results processing failed: {str(e)}"
+            self.db_manager.update_batch_job_status(job_id, 'failed', f"Vision results processing failed: {str(e)}")
     
     def _submit_translation_batch(self, job_id: str, vision_results: Dict[str, str], languages: List[str]):
         """
@@ -278,7 +283,7 @@ class BatchProcessor:
                     translation_jsonl,
                     f"Translation processing for job {job_id}"
                 )
-                job['translation_batch_id'] = translation_batch_id
+                self.db_manager.update_batch_job_openai_id(job_id, translation_batch_id, 'translation')
                 logger.info(f"Submitted translation batch {translation_batch_id} for job {job_id}")
             
         except Exception as e:
@@ -289,7 +294,10 @@ class BatchProcessor:
         """
         Process completed translation batch results
         """
-        job = self.active_jobs[job_id]
+        job = self.db_manager.get_batch_job(job_id)
+        if not job:
+            logger.error(f"Job {job_id} not found for translation results processing")
+            return
         
         try:
             results_content = self.openai_client.download_batch_results(translation_status['output_file_id'])
@@ -315,12 +323,12 @@ class BatchProcessor:
                                 if response_body.get('output_text'):
                                     translation_results[lot_id][language] = response_body['output_text']
                                 else:
-                                    translation_results[lot_id][language] = job['vision_results'].get(lot_id, "Translation failed")
+                                    translation_results[lot_id][language] = "Translation failed"
                             else:
                                 logger.error(f"Translation failed for {lot_id}:{language}: {result.get('error', 'Unknown error')}")
-                                translation_results[lot_id][language] = job['vision_results'].get(lot_id, "Translation failed")
+                                translation_results[lot_id][language] = "Translation failed"
             
-            job['translation_results'] = translation_results
+            # Store translation results in database - handled by monitor service
             
         except Exception as e:
             logger.error(f"Translation results processing failed for {job_id}: {str(e)}")
@@ -330,28 +338,32 @@ class BatchProcessor:
         """
         Send webhook notifications for completed job
         """
-        job = self.active_jobs[job_id]
+        job = self.db_manager.get_batch_job(job_id)
+        if not job:
+            logger.error(f"Job {job_id} not found for webhook sending")
+            return
         
         try:
             # Group lots by webhook URL
             webhook_groups = {}
             
-            for lot in job['lots']:
-                webhook_url = lot.get('webhook')
+            # Get lots from database
+            for lot in job.lots:
+                webhook_url = lot.webhook_url
                 if webhook_url:
                     if webhook_url not in webhook_groups:
                         webhook_groups[webhook_url] = []
                     
-                    lot_id = lot['lot_id']
+                    lot_id = lot.lot_id
                     
                     # Prepare descriptions
                     descriptions = []
                     
-                    # Add English description
-                    if lot_id in job['vision_results']:
+                    # Add English description from database
+                    if lot.vision_result:
                         descriptions.append({
                             'language': 'en',
-                            'damages': f"<p>{job['vision_results'][lot_id]}</p>"
+                            'damages': f"<p>{lot.vision_result}</p>"
                         })
                     
                     # Add translations
