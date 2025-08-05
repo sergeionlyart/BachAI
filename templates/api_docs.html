@@ -40,10 +40,12 @@
                             <a class="nav-link" href="#authentication">Authentication</a>
                             <a class="nav-link" href="#sync-mode">Synchronous Mode</a>
                             <a class="nav-link" href="#batch-mode">Batch Mode</a>
-                            <a class="nav-link" href="#webhook">Webhook Format</a>
+                            <a class="nav-link" href="#polling-api">Polling API</a>
+                            <a class="nav-link" href="#webhook">Webhook System</a>
                             <a class="nav-link" href="#examples">Code Examples</a>
                             <a class="nav-link" href="#testing">API Testing</a>
                             <a class="nav-link" href="#limits">Limits & Errors</a>
+                            <a class="nav-link" href="#production">Production</a>
                         </div>
                     </div>
                 </div>
@@ -55,19 +57,21 @@
                 <section id="overview" class="mb-5">
                     <h2><i class="fas fa-info-circle"></i> Overview</h2>
                     <p class="lead">
-                        The Generation Service API provides AI-powered car damage assessment and multilingual description generation 
-                        using OpenAI's Vision and Translation models.
+                        Production-ready microservice for AI-powered car damage assessment and multilingual description generation 
+                        using OpenAI's Vision and Translation models with comprehensive PostgreSQL integration.
                     </p>
                     
                     <div class="alert alert-info">
                         <h6><i class="fas fa-lightbulb"></i> Key Features</h6>
                         <ul class="mb-0">
-                            <li>Vision analysis using OpenAI o4-mini model</li>
-                            <li>Translation to multiple languages using GPT-4.1-mini</li>
-                            <li>Synchronous processing for single cars (≤300s)</li>
-                            <li>Batch processing for up to 50,000 cars (≤24h)</li>
-                            <li>Webhook notifications for async results</li>
-                            <li>HMAC-SHA256 signature validation</li>
+                            <li><strong>AI Vision Analysis:</strong> OpenAI o4-mini model with maximum accuracy</li>
+                            <li><strong>100+ Languages:</strong> Translation using GPT-4.1-mini</li>
+                            <li><strong>PostgreSQL Integration:</strong> Persistent job tracking and result storage</li>
+                            <li><strong>Background Worker:</strong> Automated monitoring and webhook delivery</li>
+                            <li><strong>Polling API:</strong> Real-time status tracking and result retrieval</li>
+                            <li><strong>Synchronous Mode:</strong> Single cars (≤300s) with instant results</li>
+                            <li><strong>Batch Mode:</strong> Up to 50,000 cars (≤24h) with webhooks</li>
+                            <li><strong>Security:</strong> HMAC-SHA256 signature validation</li>
                         </ul>
                     </div>
 
@@ -93,6 +97,18 @@
                                     <td>2+ cars in request</td>
                                     <td>No limit</td>
                                     <td>≤ 24 hours</td>
+                                </tr>
+                                <tr>
+                                    <td><span class="badge bg-info">Polling</span></td>
+                                    <td>GET requests for results</td>
+                                    <td>N/A</td>
+                                    <td>Instant</td>
+                                </tr>
+                                <tr>
+                                    <td><span class="badge bg-warning">Webhook</span></td>
+                                    <td>Automatic notifications</td>
+                                    <td>N/A</td>
+                                    <td>Instant</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -212,30 +228,125 @@ def generate_signature(lots, shared_key):
                         <div class="card-body">
                             <pre><code class="language-json">{
   "job_id": "550e8400-e29b-41d4-a716-446655440000",
-  "status": "accepted"
+  "status": "accepted",
+  "created_at": "2025-08-05T07:30:00Z",
+  "total_lots": 2,
+  "languages": ["en", "de"],
+  "estimated_completion": "2025-08-05T08:30:00Z"
 }</code></pre>
                         </div>
                     </div>
 
-                    <h5 class="mt-4">Check Batch Status</h5>
+                    <div class="alert alert-success mt-4">
+                        <h6><i class="fas fa-info-circle"></i> Batch Job Statuses</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <ul class="mb-0">
+                                    <li><span class="badge bg-secondary">pending</span> - Queued for processing</li>
+                                    <li><span class="badge bg-primary">processing</span> - OpenAI vision analysis</li>
+                                    <li><span class="badge bg-info">translating</span> - Multi-language translation</li>
+                                </ul>
+                            </div>
+                            <div class="col-md-6">
+                                <ul class="mb-0">
+                                    <li><span class="badge bg-success">completed</span> - All results ready</li>
+                                    <li><span class="badge bg-danger">failed</span> - Processing error</li>
+                                    <li><span class="badge bg-warning">cancelled</span> - User cancelled</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Polling API -->
+                <section id="polling-api" class="mb-5">
+                    <h2><i class="fas fa-search"></i> Polling API - Job Tracking</h2>
+                    <p>Real-time job status monitoring and result retrieval system.</p>
+
+                    <h5>Job Status Check</h5>
                     <div class="card bg-dark">
                         <div class="card-header">
                             <code>GET /api/v1/batch-status/{job_id}</code>
                         </div>
                         <div class="card-body">
+                            <p class="text-info">Headers: <code>X-Signature: sha256=your_hmac_signature</code></p>
                             <pre><code class="language-json">{
   "job_id": "550e8400-e29b-41d4-a716-446655440000",
   "status": "processing",
-  "created_at": "2025-01-06T10:30:00Z"
+  "created_at": "2025-08-05T07:30:00Z",
+  "updated_at": "2025-08-05T07:35:00Z",
+  "progress": {
+    "total_lots": 100,
+    "processed_lots": 45,
+    "failed_lots": 2,
+    "completion_percentage": 45.0
+  },
+  "languages": ["en", "ru", "de"],
+  "openai_vision_batch_id": "batch_67890abc"
 }</code></pre>
                         </div>
+                    </div>
+
+                    <h5 class="mt-4">Get Results</h5>
+                    <div class="card bg-dark">
+                        <div class="card-header">
+                            <code>GET /api/v1/batch-results/{job_id}</code>
+                        </div>
+                        <div class="card-body">
+                            <pre><code class="language-json">{
+  "job_id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "completed",
+  "completed_at": "2025-08-05T08:15:00Z",
+  "results": {
+    "total_lots": 2,
+    "processed_lots": 2,
+    "lots": [
+      {
+        "lot_id": "batch-001",
+        "status": "completed",
+        "descriptions": [...]
+      }
+    ]
+  }
+}</code></pre>
+                        </div>
+                    </div>
+
+                    <h5 class="mt-4">Additional Endpoints</h5>
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Endpoint</th>
+                                    <th>Method</th>
+                                    <th>Description</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td><code>/api/v1/batch-results/{id}/download</code></td>
+                                    <td><span class="badge bg-info">GET</span></td>
+                                    <td>Download results as JSON file</td>
+                                </tr>
+                                <tr>
+                                    <td><code>/api/v1/batch-jobs</code></td>
+                                    <td><span class="badge bg-info">GET</span></td>
+                                    <td>List all jobs with filtering</td>
+                                </tr>
+                                <tr>
+                                    <td><code>/api/v1/batch-jobs/{id}/cancel</code></td>
+                                    <td><span class="badge bg-warning">POST</span></td>
+                                    <td>Cancel pending/processing job</td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </section>
 
                 <!-- Webhook -->
                 <section id="webhook" class="mb-5">
-                    <h2><i class="fas fa-bell"></i> Webhook Format</h2>
-                    <p>Webhook notifications are sent when batch processing completes.</p>
+                    <h2><i class="fas fa-bell"></i> Webhook System</h2>
+                    <p>Production-ready webhook system with automatic retries and reliable delivery via Background Worker.</p>
 
                     <h5>Webhook Payload</h5>
                     <div class="card bg-dark">
@@ -268,7 +379,23 @@ def generate_signature(lots, shared_key):
 
                     <div class="alert alert-info">
                         <i class="fas fa-info-circle"></i>
-                        <strong>Retry Policy:</strong> Webhooks are retried up to 5 times with exponential backoff (1s → 16s).
+                        <strong>Advanced Retry Policy:</strong> Background Worker automatically handles failed deliveries with up to 5 attempts using exponential backoff (30s → 240s). All delivery attempts are tracked in PostgreSQL.
+                    </div>
+
+                    <h5 class="mt-4">Webhook Verification</h5>
+                    <div class="card bg-dark">
+                        <div class="card-body">
+                            <pre><code class="language-python">import hmac
+import hashlib
+
+def verify_webhook_signature(payload_json, received_signature, shared_key):
+    expected_signature = hmac.new(
+        shared_key.encode(),
+        payload_json.encode(), 
+        hashlib.sha256
+    ).hexdigest()
+    return f"sha256={expected_signature}" == received_signature</code></pre>
+                        </div>
                     </div>
                 </section>
 
@@ -463,6 +590,47 @@ print(f"Response: {response.json()}")</code></pre>
                         </table>
                     </div>
                 </section>
+
+                <!-- Production -->
+                <section id="production" class="mb-5">
+                    <h2><i class="fas fa-server"></i> Production Deployment</h2>
+                    <p>Ready for production deployment with PostgreSQL, Background Worker, and comprehensive monitoring.</p>
+
+                    <h5>Environment Variables</h5>
+                    <div class="card bg-dark">
+                        <div class="card-body">
+                            <pre><code class="language-bash"># Required
+export DATABASE_URL="postgresql://user:password@host:5432/database"
+export OPENAI_API_KEY="sk-your-openai-api-key"
+export SHARED_KEY="your-secret-hmac-key-minimum-32-chars"
+
+# Optional
+export SESSION_SECRET="your-session-secret-key"
+export LOG_LEVEL="INFO"</code></pre>
+                        </div>
+                    </div>
+
+                    <h5 class="mt-4">System Architecture</h5>
+                    <div class="alert alert-success">
+                        <h6><i class="fas fa-check-circle"></i> Production Components</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <ul class="mb-0">
+                                    <li><strong>Flask App:</strong> Main API with Gunicorn</li>
+                                    <li><strong>PostgreSQL:</strong> Persistent job storage</li>
+                                    <li><strong>Background Worker:</strong> Automated monitoring</li>
+                                </ul>
+                            </div>
+                            <div class="col-md-6">
+                                <ul class="mb-0">
+                                    <li><strong>OpenAI Integration:</strong> Vision & Translation</li>
+                                    <li><strong>Webhook Delivery:</strong> Reliable notifications</li>
+                                    <li><strong>Load Balancer:</strong> nginx/HAProxy ready</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </section>
             </div>
         </div>
     </div>
@@ -470,7 +638,8 @@ print(f"Response: {response.json()}")</code></pre>
     <footer class="bg-dark text-center py-4 mt-5">
         <div class="container">
             <p class="text-muted mb-0">
-                &copy; 2025 Generation Service - AI-Powered Car Description API
+                &copy; 2025 Generation Service - Production-Ready AI Car Description API<br>
+                <strong>Version 2.0</strong> | PostgreSQL Integration | Background Worker | Polling API
             </p>
         </div>
     </footer>

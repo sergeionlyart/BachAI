@@ -27,51 +27,66 @@
                 <div class="text-center mb-5">
                     <h1 class="display-4 mb-3">
                         <i class="fas fa-car text-primary"></i>
-                        Car Description Generation Service
+                        Generation Service
                     </h1>
                     <p class="lead">
-                        AI-powered multilingual car damage assessment and description generation using OpenAI Vision API
+                        Production-ready microservice for AI-powered multilingual car damage assessment and description generation using OpenAI Vision and Translation APIs
                     </p>
+                    <div class="alert alert-success">
+                        <i class="fas fa-rocket"></i>
+                        <strong>New Features:</strong> PostgreSQL integration, Background Worker, Polling API, and enhanced Webhook system with automatic retries
+                    </div>
                 </div>
 
                 <div class="row g-4 mb-5">
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <div class="card h-100">
                             <div class="card-body text-center">
                                 <i class="fas fa-eye fa-3x text-info mb-3"></i>
-                                <h5 class="card-title">Vision Analysis</h5>
+                                <h5 class="card-title">AI Vision Analysis</h5>
                                 <p class="card-text">
-                                    Advanced AI vision processing using OpenAI's o4-mini model to analyze car images and detect damage
+                                    Advanced AI vision processing using OpenAI's o4-mini model with maximum accuracy for car damage detection
                                 </p>
                             </div>
                         </div>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <div class="card h-100">
                             <div class="card-body text-center">
                                 <i class="fas fa-language fa-3x text-success mb-3"></i>
-                                <h5 class="card-title">Multi-language</h5>
+                                <h5 class="card-title">100+ Languages</h5>
                                 <p class="card-text">
-                                    Automatic translation to multiple languages using GPT-4.1-mini for global marketplace support
+                                    Automatic translation to 100+ languages using GPT-4.1-mini for global marketplace support
                                 </p>
                             </div>
                         </div>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <div class="card h-100">
                             <div class="card-body text-center">
-                                <i class="fas fa-bolt fa-3x text-warning mb-3"></i>
-                                <h5 class="card-title">Batch Processing</h5>
+                                <i class="fas fa-database fa-3x text-primary mb-3"></i>
+                                <h5 class="card-title">PostgreSQL</h5>
                                 <p class="card-text">
-                                    Handle single cars instantly or process thousands in batch mode with webhook notifications
+                                    Production-ready PostgreSQL integration with persistent job tracking and result storage
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card h-100">
+                            <div class="card-body text-center">
+                                <i class="fas fa-cogs fa-3x text-warning mb-3"></i>
+                                <h5 class="card-title">Background Worker</h5>
+                                <p class="card-text">
+                                    Automated monitoring, result processing, and webhook delivery with retry mechanisms
                                 </p>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <div class="row">
-                    <div class="col-lg-6">
+                <div class="row g-4">
+                    <div class="col-lg-4">
                         <div class="card">
                             <div class="card-header">
                                 <h5 class="card-title mb-0">
@@ -93,7 +108,7 @@
                             </div>
                         </div>
                     </div>
-                    <div class="col-lg-6">
+                    <div class="col-lg-4">
                         <div class="card">
                             <div class="card-header">
                                 <h5 class="card-title mb-0">
@@ -104,11 +119,33 @@
                             <div class="card-body">
                                 <ul class="list-unstyled">
                                     <li><i class="fas fa-check text-success"></i> Multiple cars (2-50,000)</li>
-                                    <li><i class="fas fa-check text-success"></i> Webhook notifications</li>
+                                    <li><i class="fas fa-check text-success"></i> PostgreSQL persistence</li>
                                     <li><i class="fas fa-check text-success"></i> 24-hour processing window</li>
-                                    <li><i class="fas fa-check text-success"></i> Cost-effective scaling</li>
+                                    <li><i class="fas fa-check text-success"></i> Webhook notifications</li>
                                 </ul>
                                 <a href="/docs#batch-mode" class="btn btn-primary">
+                                    <i class="fas fa-book"></i>
+                                    Learn More
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="card-title mb-0">
+                                    <i class="fas fa-search"></i>
+                                    Polling API
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <ul class="list-unstyled">
+                                    <li><i class="fas fa-check text-success"></i> Real-time status tracking</li>
+                                    <li><i class="fas fa-check text-success"></i> Progress monitoring</li>
+                                    <li><i class="fas fa-check text-success"></i> Result download</li>
+                                    <li><i class="fas fa-check text-success"></i> Job management</li>
+                                </ul>
+                                <a href="/docs#polling-api" class="btn btn-primary">
                                     <i class="fas fa-book"></i>
                                     Learn More
                                 </a>
@@ -137,19 +174,27 @@
 
                 <div class="mt-5 pt-4 border-top">
                     <div class="row text-center">
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <h6 class="text-muted">Processing Modes</h6>
-                            <p>Sync & Batch</p>
+                            <p>Sync, Batch & Polling</p>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <h6 class="text-muted">Max Batch Size</h6>
                             <p>50,000 cars</p>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <h6 class="text-muted">Languages</h6>
-                            <p>Multi-language</p>
+                            <p>100+ languages</p>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-2">
+                            <h6 class="text-muted">Database</h6>
+                            <p>PostgreSQL</p>
+                        </div>
+                        <div class="col-md-2">
+                            <h6 class="text-muted">Background</h6>
+                            <p>Auto Worker</p>
+                        </div>
+                        <div class="col-md-2">
                             <h6 class="text-muted">Security</h6>
                             <p>HMAC-SHA256</p>
                         </div>
