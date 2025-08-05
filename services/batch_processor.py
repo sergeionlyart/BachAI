@@ -3,7 +3,7 @@ import logging
 import uuid
 import time
 from typing import List, Dict, Any, Optional
-from datetime import datetime, timedelta
+
 from services.openai_client import OpenAIClient
 from services.image_validator import ImageValidator
 from services.webhook_handler import WebhookHandler
@@ -257,7 +257,10 @@ class BatchProcessor:
         """
         Submit translation batch job
         """
-        job = self.active_jobs[job_id]
+        job = self.db_manager.get_batch_job(job_id)
+        if not job:
+            logger.error(f"Job {job_id} not found for translation batch submission")
+            return
         
         try:
             translation_requests = []
@@ -396,13 +399,9 @@ class BatchProcessor:
         """
         Clean up old completed jobs
         """
-        cutoff_time = datetime.utcnow() - timedelta(hours=max_age_hours)
-        jobs_to_remove = []
-        
-        for job_id, job in self.active_jobs.items():
-            if job['created_at'] < cutoff_time and job['status'] in ['completed', 'failed']:
-                jobs_to_remove.append(job_id)
-        
-        for job_id in jobs_to_remove:
-            del self.active_jobs[job_id]
-            logger.info(f"Cleaned up old job {job_id}")
+        try:
+            days = max_age_hours / 24
+            removed = self.db_manager.cleanup_old_jobs(days=int(days))
+            logger.info(f"Cleaned up {removed} old jobs")
+        except Exception as e:
+            logger.error(f"Old jobs cleanup failed: {str(e)}")

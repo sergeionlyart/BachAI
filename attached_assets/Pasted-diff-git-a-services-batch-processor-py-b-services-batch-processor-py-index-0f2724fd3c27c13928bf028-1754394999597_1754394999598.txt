@@ -1,0 +1,134 @@
+diff --git a/services/batch_processor.py b/services/batch_processor.py
+index 0f2724fd3c27c13928bf028e57467dbda081b0ff..598933fdbf5a0b314a3a9a2ce32b1781b04937e9 100644
+--- a/services/batch_processor.py
++++ b/services/batch_processor.py
+@@ -1,31 +1,30 @@
+ import json
+ import logging
+ import uuid
+ import time
+ from typing import List, Dict, Any, Optional
+-from datetime import datetime, timedelta
+ from services.openai_client import OpenAIClient
+ from services.image_validator import ImageValidator
+ from services.webhook_handler import WebhookHandler
+ from config import MAX_LINES, MAX_FILE_BYTES, MAX_LINE_BYTES
+ 
+ logger = logging.getLogger(__name__)
+ 
+ class BatchProcessor:
+     def __init__(self):
+         self.openai_client = OpenAIClient()
+         self.image_validator = ImageValidator()
+         self.webhook_handler = WebhookHandler()
+         
+         # Initialize database manager for persistent storage
+         from database.models import db
+         from services.database_manager import DatabaseManager
+         self.db_manager = DatabaseManager(db.session)
+         
+         # Remove in-memory storage - using PostgreSQL now
+         logger.info("BatchProcessor initialized with PostgreSQL persistence")
+     
+     def create_batch_job(self, lots: List[Dict[str, Any]], languages: List[str]) -> str:
+         """
+         Create and submit batch processing job (optimized for fast response)
+         """
+@@ -235,51 +234,54 @@ class BatchProcessor:
+                             logger.error(f"No response for lot {lot_id}: {result.get('error', 'Unknown error')}")
+                             vision_results[lot_id] = "Error generating description"
+             
+             # Store vision results in database 
+             # This would be handled by storing individual lot results
+             
+             # Now submit translation batch if needed
+             translation_languages = [lang for lang in job.languages if lang.lower() != 'en']
+             
+             if translation_languages and vision_results:
+                 self._submit_translation_batch(job_id, vision_results, translation_languages)
+                 self.db_manager.update_batch_job_status(job_id, 'translating')
+             else:
+                 # No translation needed, job is complete
+                 self.db_manager.update_batch_job_status(job_id, 'completed')
+                 # Webhook sending handled by monitor service
+             
+         except Exception as e:
+             logger.error(f"Vision results processing failed for {job_id}: {str(e)}")
+             self.db_manager.update_batch_job_status(job_id, 'failed', f"Vision results processing failed: {str(e)}")
+     
+     def _submit_translation_batch(self, job_id: str, vision_results: Dict[str, str], languages: List[str]):
+         """
+         Submit translation batch job
+         """
+-        job = self.active_jobs[job_id]
++        job = self.db_manager.get_batch_job(job_id)
++        if not job:
++            logger.error(f"Job {job_id} not found for translation batch submission")
++            return
+         
+         try:
+             translation_requests = []
+             
+             for lot_id, english_text in vision_results.items():
+                 for lang in languages:
+                     translation_custom_id = f"tr:{lot_id}:{lang}"
+                     translation_request = {
+                         "custom_id": translation_custom_id,
+                         "method": "POST",
+                         "url": "/v1/responses",
+                         "body": {
+                             "model": "gpt-4.1-mini",
+                             "input": f"Translate the following text into {lang} only. Maintain the original formatting and meaning:\n\n{english_text}",
+                             "max_output_tokens": 2048
+                         }
+                     }
+                     translation_requests.append(translation_request)
+             
+             if translation_requests:
+                 translation_jsonl = self.openai_client.create_batch_file(translation_requests)
+                 translation_batch_id = self.openai_client.submit_batch_job(
+                     translation_jsonl,
+                     f"Translation processing for job {job_id}"
+                 )
+@@ -374,35 +376,31 @@ class BatchProcessor:
+                                 'damages': f"<p>{text}</p>"
+                             })
+                     
+                     lot_result = {
+                         'lot_id': lot_id,
+                         'descriptions': descriptions
+                     }
+                     
+                     # Add missing images if any
+                     if lot.get('missing_images'):
+                         lot_result['missing_images'] = lot['missing_images']
+                     
+                     webhook_groups[webhook_url].append(lot_result)
+             
+             # Send webhooks
+             for webhook_url, lots_data in webhook_groups.items():
+                 self.webhook_handler.send_webhook(webhook_url, lots_data)
+             
+         except Exception as e:
+             logger.error(f"Webhook sending failed for {job_id}: {str(e)}")
+     
+     def cleanup_old_jobs(self, max_age_hours: int = 24):
+         """
+         Clean up old completed jobs
+         """
+-        cutoff_time = datetime.utcnow() - timedelta(hours=max_age_hours)
+-        jobs_to_remove = []
+-        
+-        for job_id, job in self.active_jobs.items():
+-            if job['created_at'] < cutoff_time and job['status'] in ['completed', 'failed']:
+-                jobs_to_remove.append(job_id)
+-        
+-        for job_id in jobs_to_remove:
+-            del self.active_jobs[job_id]
+-            logger.info(f"Cleaned up old job {job_id}")
++        try:
++            days = max_age_hours / 24
++            removed = self.db_manager.cleanup_old_jobs(days=int(days))
++            logger.info(f"Cleaned up {removed} old jobs")
++        except Exception as e:
++            logger.error(f"Old jobs cleanup failed: {str(e)}")
