@@ -201,22 +201,7 @@ class DatabaseManager:
             logger.error(f"Database error getting batch jobs list: {str(e)}")
             return []
     
-    def get_pending_webhook_deliveries(self):
-        """
-        Get webhook deliveries that need to be attempted
-        """
-        try:
-            from sqlalchemy import and_
-            return self.session.query(WebhookDelivery).filter(
-                and_(
-                    WebhookDelivery.status.in_(['pending', 'failed']),
-                    WebhookDelivery.attempt_count < 5
-                )
-            ).all()
-        except SQLAlchemyError as e:
-            logger.error(f"Database error getting pending webhooks: {str(e)}")
-            return []
-    
+
     def mark_webhook_delivered(self, webhook_id: str) -> bool:
         """
         Mark webhook as successfully delivered
@@ -304,21 +289,32 @@ class DatabaseManager:
             logger.error(f"Database error creating webhook delivery: {str(e)}")
             raise e
     
-    def get_pending_webhook_deliveries(self) -> List[WebhookDelivery]:
+    def get_pending_webhook_deliveries(self, ready_only: bool = False) -> List[WebhookDelivery]:
         """
-        Get webhook deliveries that need to be attempted
+        Get webhook deliveries that need to be attempted.
+
+        Args:
+            ready_only: If True, only return deliveries that are ready to be
+                retried (next_attempt_at is in the past or not set). When False,
+                return all pending or failed deliveries regardless of schedule.
         """
         try:
-            return self.session.query(WebhookDelivery).filter(
+            query = self.session.query(WebhookDelivery).filter(
                 and_(
                     WebhookDelivery.status.in_(['pending', 'failed']),
-                    WebhookDelivery.attempt_count < 5,
+                    WebhookDelivery.attempt_count < 5
+                )
+            )
+
+            if ready_only:
+                query = query.filter(
                     or_(
                         WebhookDelivery.next_attempt_at.is_(None),
                         WebhookDelivery.next_attempt_at <= datetime.utcnow()
                     )
                 )
-            ).all()
+
+            return query.all()
         except SQLAlchemyError as e:
             logger.error(f"Database error getting pending webhooks: {str(e)}")
             return []

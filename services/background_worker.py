@@ -110,15 +110,11 @@ class BackgroundWorker:
         Process pending webhook deliveries
         """
         try:
-            # Get pending webhook deliveries
-            pending_webhooks = db_manager.get_pending_webhook_deliveries()
-            
+            # Get webhook deliveries that are ready for processing
+            pending_webhooks = db_manager.get_pending_webhook_deliveries(ready_only=True)
+
             for webhook in pending_webhooks:
                 try:
-                    # Check if it's time to retry
-                    if webhook.next_attempt_at is not None and datetime.utcnow() < webhook.next_attempt_at:
-                        continue
-                    
                     # Check retry limit
                     if webhook.attempt_count >= self.max_webhook_retries:
                         db_manager.mark_webhook_failed(str(webhook.id), "Max retries exceeded")
