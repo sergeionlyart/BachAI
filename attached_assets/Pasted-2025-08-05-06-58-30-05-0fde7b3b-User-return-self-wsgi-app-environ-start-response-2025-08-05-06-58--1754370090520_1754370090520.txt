@@ -1,0 +1,348 @@
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+return self.wsgi_app(environ, start_response)
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/werkzeug/middleware/proxy_fix.py", line 183, in __call__
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+return self.app(environ, start_response)
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/flask/app.py", line 1511, in wsgi_app
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+response = self.full_dispatch_request()
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/flask/app.py", line 917, in full_dispatch_request
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+rv = self.dispatch_request()
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+^^^^^^^^^^^^^^^^^^^^^^^
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/flask/app.py", line 902, in dispatch_request
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args) # type: ignore[no-any-return]
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+File "/home/runner/workspace/routes/api.py", line 62, in generate_descriptions
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+return handle_sync_request(lots[0], languages)
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+File "/home/runner/workspace/routes/api.py", line 107, in handle_sync_request
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+english_description = openai_client.generate_vision_description(valid_urls, additional_info)
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+File "/home/runner/workspace/utils/retry.py", line 32, in wrapper
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+return func(*args, **kwargs)
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+^^^^^^^^^^^^^^^^^^^^^
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+File "/home/runner/workspace/services/openai_client.py", line 70, in generate_vision_description
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+response = self.client.chat.completions.create(
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/openai/_utils/_utils.py", line 287, in wrapper
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+return func(*args, **kwargs)
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+^^^^^^^^^^^^^^^^^^^^^
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/openai/resources/chat/completions/completions.py", line 1131, in create
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+return self._post(
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+^^^^^^^^^^^
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/openai/_base_client.py", line 1256, in post
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/openai/_base_client.py", line 979, in request
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+response = self._client.send(
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+^^^^^^^^^^^^^^^^^^
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/httpx/_client.py", line 914, in send
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+response = self._send_handling_auth(
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+^^^^^^^^^^^^^^^^^^^^^^^^^
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/httpx/_client.py", line 942, in _send_handling_auth
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+response = self._send_handling_redirects(
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/httpx/_client.py", line 979, in _send_handling_redirects
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+response = self._send_single_request(request)
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/httpx/_client.py", line 1014, in _send_single_request
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+response = transport.handle_request(request)
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/httpx/_transports/default.py", line 250, in handle_request
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+resp = self._pool.handle_request(req)
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/httpcore/_sync/connection_pool.py", line 256, in handle_request
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+raise exc from None
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/httpcore/_sync/connection_pool.py", line 236, in handle_request
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+response = connection.handle_request(
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/httpcore/_sync/connection.py", line 103, in handle_request
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+return self._connection.handle_request(request)
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/httpcore/_sync/http11.py", line 136, in handle_request
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+raise exc
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/httpcore/_sync/http11.py", line 106, in handle_request
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+) = self._receive_response_headers(**kwargs)
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/httpcore/_sync/http11.py", line 177, in _receive_response_headers
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+event = self._receive_event(timeout=timeout)
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/httpcore/_sync/http11.py", line 217, in _receive_event
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+data = self._network_stream.read(
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/httpcore/_backends/sync.py", line 128, in read
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+return self._sock.recv(max_bytes)
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+File "/nix/store/7d088dip86hlzri9sk0h78b63yfmx0a0-python3-3.11.13/lib/python3.11/ssl.py", line 1295, in recv
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+return self.read(buflen)
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+^^^^^^^^^^^^^^^^^
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+File "/nix/store/7d088dip86hlzri9sk0h78b63yfmx0a0-python3-3.11.13/lib/python3.11/ssl.py", line 1168, in read
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+return self._sslobj.read(len)
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+^^^^^^^^^^^^^^^^^^^^^^
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/gunicorn/workers/base.py", line 204, in handle_abort
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+sys.exit(1)
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+SystemExit: 1
+2025-08-05 06:58:30.05
+0fde7b3b
+User
+[2025-08-05 04:58:30 +0000] [29] [INFO] Worker exiting (pid: 29)
+2025-08-05 06:58:30.31
+0fde7b3b
+User
+[2025-08-05 04:58:30 +0000] [31] [INFO] Booting worker with pid: 31
+2025-08-05 06:58:31.39
+0fde7b3b
+User
+2025-08-05 04:58:31,398 - root - INFO - Logging configured successfully
