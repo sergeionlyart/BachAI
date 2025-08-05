@@ -241,7 +241,6 @@ class BatchProcessor:
                         "url": "/v1/responses",
                         "body": {
                             "model": "gpt-4.1-mini",
-                            "reasoning": {"effort": "low"},
                             "input": f"Translate the following text into {lang} only. Maintain the original formatting and meaning:\n\n{english_text}",
                             "max_output_tokens": 2048
                         }

@@ -46,7 +46,7 @@ class OpenAIClient:
                 model="o4-mini",
                 reasoning={"effort": "medium"},
                 input=input_content,
-                max_output_tokens=1024
+                max_output_tokens=2048
             )
             
             # Log completion time
@@ -94,9 +94,9 @@ class OpenAIClient:
             input_content = f"Translate the following text into {target_language} only. Maintain the original formatting and meaning:\n\n{text}"
             
             # Use gpt-4.1-mini via Responses API for translation
+            # Note: gpt-4.1-mini doesn't support reasoning parameter
             response = self.client.responses.create(
                 model="gpt-4.1-mini",
-                reasoning={"effort": "low"},  # Low effort for translation tasks
                 input=input_content,
                 max_output_tokens=2048
             )
