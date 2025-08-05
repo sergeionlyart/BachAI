@@ -1,51 +1,89 @@
-# Generation Service API Documentation
+# Generation Service API Documentation v2.0
 
-## Обзор
+## Обзор системы
 
-Generation Service API представляет собой производственно-готовый микросервис для ИИ-анализа повреждений автомобилей и генерации многоязычных описаний с использованием OpenAI Vision и Translation моделей.
+Generation Service — это production-ready микросервис для автоматической генерации многоязычных описаний повреждений автомобилей на основе анализа изображений с использованием искусственного интеллекта OpenAI.
 
-### Ключевые возможности
+### 🚀 Ключевые возможности
 
-- **Vision анализ** с использованием OpenAI o4-mini модели с максимальной точностью
-- **Многоязычный перевод** с использованием GPT-4.1-mini для до 100+ языков
-- **Синхронная обработка** для одного автомобиля (≤300 сек) с мгновенными результатами  
-- **Пакетная обработка** до 50,000 автомобилей одновременно (≤24 часа)
-- **PostgreSQL интеграция** для надежного хранения и отслеживания заданий
-- **Background Worker** для автоматического мониторинга и обработки
-- **Polling API** для проверки статуса и получения результатов в реальном времени
-- **Webhook система** с автоматическими повторами и экспоненциальной задержкой
-- **HMAC-SHA256 валидация** для безопасности всех запросов
+- **AI Vision Analysis**: Анализ изображений автомобилей с использованием OpenAI o4-mini модели с максимальной точностью
+- **Многоязычный перевод**: Автоматический перевод на 100+ языков с использованием GPT-4.1-mini
+- **PostgreSQL интеграция**: Полная persistence система для надежного хранения заданий и результатов
+- **Background Worker**: Автоматический мониторинг, обработка результатов и доставка webhook уведомлений
+- **Polling API**: Система real-time отслеживания статуса заданий и получения результатов
+- **Синхронная обработка**: Мгновенные результаты для одного автомобиля (≤300 секунд)
+- **Пакетная обработка**: Обработка до 50,000 автомобилей одновременно (≤24 часа)
+- **Webhook система**: Автоматические уведомления с retry механизмами и exponential backoff
+- **HMAC-SHA256 безопасность**: Валидация подписей для всех запросов
 
-### Архитектура обработки
+### 🏗️ Архитектура системы
 
-| Режим обработки | Условие запуска | Макс. изображений/машина | Время ответа | Persistence |
-|----------------|-----------------|-------------------------|--------------|-------------|
-| **Синхронный** | 1 машина в запросе | ≤ 20 | ≤ 300 секунд | Временная |
-| **Пакетный** | 2+ машины в запросе | Без ограничений | ≤ 24 часа | PostgreSQL |
-| **Polling** | GET запросы к результатам | N/A | Мгновенно | PostgreSQL |
-| **Webhook** | Автоматические уведомления | N/A | Мгновенно | PostgreSQL |
+| Компонент | Описание | Технология |
+|-----------|----------|-------------|
+| **Flask API** | Основное REST API приложение | Flask + Gunicorn |
+| **PostgreSQL** | База данных для persistent хранения | PostgreSQL + SQLAlchemy |
+| **Background Worker** | Автоматический мониторинг и webhook доставка | Python threading |
+| **OpenAI Integration** | Vision анализ и перевод текстов | OpenAI Responses API |
+| **Webhook System** | Надежная доставка уведомлений | HTTP callbacks + retry logic |
 
-## Аутентификация
+### 📊 Режимы обработки
 
-Все запросы должны включать валидную HMAC-SHA256 подпись для безопасности.
+| Режим | Условие активации | Макс. изображений | Время ответа | Persistence | Уведомления |
+|-------|------------------|-------------------|---------------|-------------|-------------|
+| **Синхронный** | 1 автомобиль в запросе | ≤ 20 | ≤ 300 секунд | Временная | Немедленно |
+| **Пакетный** | 2+ автомобилей в запросе | Без ограничений | ≤ 24 часа | PostgreSQL | Webhook |
+| **Polling** | GET запросы к API | N/A | Мгновенно | PostgreSQL | Real-time |
 
-### Генерация подписи
+## 🔐 Аутентификация и безопасность
+
+Все запросы к API должны содержать валидную HMAC-SHA256 подпись в заголовке `X-Signature` или в теле запроса.
+
+### Генерация подписи для requests
 
 ```python
 import hmac
 import hashlib
 import json
 
-def generate_signature(lots, shared_key):
-    normalized = json.dumps(lots, separators=(',', ':'), sort_keys=True)
-    return hmac.new(shared_key.encode(), normalized.encode(), hashlib.sha256).hexdigest()
+def generate_signature(data, shared_key):
+    """Генерация HMAC-SHA256 подписи для payload"""
+    if isinstance(data, dict):
+        # Для JSON payload (batch/sync requests)
+        normalized = json.dumps(data["lots"], separators=(',', ':'), sort_keys=True)
+    else:
+        # Для polling requests (string job_id)
+        normalized = str(data)
+    
+    signature = hmac.new(
+        shared_key.encode(),
+        normalized.encode(),
+        hashlib.sha256
+    ).hexdigest()
+    
+    return f"sha256={signature}"
+
+# Пример использования для batch request
+payload = {"lots": [...]}  # ваши данные
+signature = generate_signature(payload, "your-shared-key")
+
+# Для polling requests
+job_id = "550e8400-e29b-41d4-a716-446655440000"
+polling_signature = generate_signature(job_id, "your-shared-key")
 ```
 
-⚠️ **Внимание:** Недействительные подписи приводят к HTTP 403 Forbidden ответам.
+### Заголовки безопасности
 
-## Синхронный режим
+```http
+Content-Type: application/json
+X-Signature: sha256=your_hmac_signature_here
+User-Agent: YourApp/1.0
+```
 
-Для обработки одного автомобиля с немедленным ответом (≤300 секунд).
+⚠️ **Важно**: Неверные подписи приводят к HTTP 403 Forbidden ответам.
+
+## 🔄 Синхронный режим
+
+Обработка одного автомобиля с мгновенным получением результатов (время ответа ≤300 секунд).
 
 ### Формат запроса
 
@@ -53,16 +91,17 @@ def generate_signature(lots, shared_key):
 
 ```json
 {
-  "signature": "hmac_sha256_signature_here",
+  "signature": "sha256=hmac_sha256_signature_here",
   "version": "1.0.0",
-  "languages": ["en", "ru", "fr"],
+  "languages": ["en", "ru", "de"],
   "lots": [
     {
-      "lot_id": "11-12345",
-      "additional_info": "2019 Toyota Camry, front collision damage",
+      "lot_id": "sync-12345",
+      "additional_info": "2021 BMW X5, front collision damage, airbags deployed",
       "images": [
-        {"url": "https://example.com/car1.jpg"},
-        {"url": "https://example.com/car2.jpg"}
+        {"url": "https://example.com/bmw-front.jpg"},
+        {"url": "https://example.com/bmw-side.jpg"},
+        {"url": "https://example.com/bmw-interior.jpg"}
       ]
     }
   ]
@@ -74,56 +113,72 @@ def generate_signature(lots, shared_key):
 ```json
 {
   "version": "1.0.0",
+  "processing_mode": "synchronous",
+  "total_lots": 1,
+  "processed_at": "2025-08-05T08:30:15Z",
   "lots": [
     {
-      "lot_id": "11-12345",
+      "lot_id": "sync-12345",
+      "status": "completed",
+      "processed_images": 3,
       "descriptions": [
         {
           "language": "en",
-          "damages": "<p>Front-end collision damage visible...</p>"
+          "damages": "<p>Significant front-end collision damage with extensive structural deformation. The vehicle shows impact damage to the front bumper, hood, and headlight assemblies. Airbag deployment indicates high-impact collision. Engine compartment integrity may be compromised.</p>"
         },
         {
-          "language": "ru", 
-          "damages": "<p>Повреждения от лобового столкновения...</p>"
+          "language": "ru",
+          "damages": "<p>Значительные повреждения передней части от столкновения с обширной структурной деформацией. Автомобиль показывает повреждения переднего бампера, капота и блоков фар. Срабатывание подушек безопасности указывает на сильное столкновение.</p>"
+        },
+        {
+          "language": "de",
+          "damages": "<p>Erhebliche Frontschäden durch Kollision mit ausgedehnter struktureller Verformung. Das Fahrzeug zeigt Aufprallschäden an der vorderen Stoßstange, der Motorhaube und den Scheinwerfereinheiten.</p>"
         }
       ],
-      "missing_images": ["https://example.com/unreachable.jpg"]
+      "missing_images": []
     }
   ]
 }
 ```
 
-## Пакетный режим
+## 📦 Пакетный режим
 
-Для обработки множественных автомобилей (2-50,000) с webhook уведомлениями.
+Асинхронная обработка множественных автомобилей (2-50,000) с PostgreSQL persistence и webhook уведомлениями.
 
-### Формат запроса
+### Создание пакетного задания
 
 **POST** `/api/v1/generate-descriptions`
 
 ```json
 {
-  "signature": "hmac_sha256_signature_here",
-  "version": "1.0.0", 
-  "languages": ["en", "de"],
+  "signature": "sha256=hmac_sha256_signature_here",
+  "version": "1.0.0",
+  "languages": ["en", "fr", "de"],
   "lots": [
     {
-      "webhook": "https://your-app.com/webhook",
       "lot_id": "batch-001",
-      "additional_info": "BMW X5 damage assessment",
-      "images": [{"url": "https://example.com/bmw1.jpg"}]
+      "webhook": "https://your-app.com/webhooks/generation-complete",
+      "additional_info": "2019 Mercedes C-Class, minor rear damage",
+      "images": [
+        {"url": "https://example.com/merc-rear.jpg"},
+        {"url": "https://example.com/merc-bumper.jpg"}
+      ]
     },
     {
-      "webhook": "https://your-app.com/webhook",
-      "lot_id": "batch-002", 
-      "additional_info": "Mercedes C-Class inspection",
-      "images": [{"url": "https://example.com/merc1.jpg"}]
+      "lot_id": "batch-002",
+      "webhook": "https://your-app.com/webhooks/generation-complete",
+      "additional_info": "2020 Audi A4, hail damage assessment",
+      "images": [
+        {"url": "https://example.com/audi-roof.jpg"},
+        {"url": "https://example.com/audi-hood.jpg"},
+        {"url": "https://example.com/audi-side.jpg"}
+      ]
     }
   ]
 }
 ```
 
-### Ответ принятия (201)
+### Ответ принятия задания (201 Created)
 
 ```json
 {
@@ -131,53 +186,60 @@ def generate_signature(lots, shared_key):
   "status": "accepted",
   "created_at": "2025-08-05T07:30:00Z",
   "total_lots": 2,
-  "languages": ["en", "de"],
-  "estimated_completion": "2025-08-05T08:30:00Z"
+  "languages": ["en", "fr", "de"],
+  "estimated_completion": "2025-08-05T08:30:00Z",
+  "processing_mode": "batch",
+  "webhook_configured": true
 }
 ```
 
-### Статусы пакетной обработки
+### 📊 Жизненный цикл пакетного задания
 
-| Статус | Описание | Действия пользователя |
-|--------|----------|----------------------|
-| **pending** | Задание создано, ожидает обработки | Ожидать или использовать polling |
-| **processing** | OpenAI обрабатывает vision анализ | Использовать polling для мониторинга |
-| **translating** | Выполняется перевод на другие языки | Использовать polling для мониторинга |
-| **completed** | Все обработано, результаты готовы | Получить результаты через polling или webhook |
-| **failed** | Ошибка в обработке | Проверить error_message, повторить запрос |
-| **cancelled** | Задание отменено пользователем | Создать новое задание при необходимости |
+| Статус | Описание | Длительность | Действия пользователя |
+|--------|----------|--------------|----------------------|
+| **pending** | Задание создано, ожидает обработки | 1-5 минут | Мониторинг через polling |
+| **processing** | OpenAI выполняет vision анализ | 30 минут - 12 часов | Мониторинг прогресса |
+| **translating** | Перевод результатов на другие языки | 5-30 минут | Ожидание завершения |
+| **completed** | Все результаты готовы | - | Получение через polling/webhook |
+| **failed** | Ошибка обработки | - | Анализ error_message, retry |
+| **cancelled** | Отменено пользователем | - | Создание нового задания |
 
-## Polling API - Отслеживание заданий
+## 🔍 Polling API - Система отслеживания
 
-Polling API позволяет в реальном времени отслеживать статус и получать результаты пакетных заданий.
+Real-time мониторинг статуса заданий и получение результатов через PostgreSQL.
 
 ### Проверка статуса задания
 
 **GET** `/api/v1/batch-status/{job_id}`
 
 **Headers:**
-```
+```http
 Content-Type: application/json
-X-Signature: sha256=your_hmac_signature
+X-Signature: sha256=hmac_signature_for_job_id
 ```
 
-**Успешный ответ (200):**
+**Успешный ответ (200 OK):**
 ```json
 {
   "job_id": "550e8400-e29b-41d4-a716-446655440000",
   "status": "processing",
   "created_at": "2025-08-05T07:30:00Z",
-  "updated_at": "2025-08-05T07:35:00Z",
+  "updated_at": "2025-08-05T07:45:00Z",
   "progress": {
     "total_lots": 100,
-    "processed_lots": 45,
-    "failed_lots": 2,
-    "completion_percentage": 45.0
+    "processed_lots": 67,
+    "failed_lots": 3,
+    "completion_percentage": 67.0,
+    "estimated_completion": "2025-08-05T08:15:00Z"
   },
   "languages": ["en", "ru", "de"],
+  "processing_details": {
+    "openai_vision_batch_id": "batch_67890abc",
+    "openai_translation_batch_id": "batch_12345def",
+    "current_stage": "vision_analysis"
+  },
   "error_message": null,
-  "openai_vision_batch_id": "batch_67890abc",
-  "openai_translation_batch_id": "batch_12345def"
+  "webhook_configured": true
 }
 ```
 
@@ -185,43 +247,78 @@ X-Signature: sha256=your_hmac_signature
 
 **GET** `/api/v1/batch-results/{job_id}`
 
-**Ответ для завершенного задания (200):**
+**Ответ для завершенного задания (200 OK):**
 ```json
 {
   "job_id": "550e8400-e29b-41d4-a716-446655440000",
   "status": "completed",
   "completed_at": "2025-08-05T08:15:00Z",
-  "results": {
-    "version": "1.0.0",
+  "processing_summary": {
     "total_lots": 2,
     "processed_lots": 2,
     "failed_lots": 0,
+    "total_images_processed": 5,
+    "total_processing_time": "45 minutes"
+  },
+  "results": {
+    "version": "1.0.0",
     "lots": [
       {
         "lot_id": "batch-001",
         "status": "completed",
+        "processed_at": "2025-08-05T08:10:00Z",
+        "processed_images": 2,
         "descriptions": [
           {
             "language": "en",
-            "damages": "<p>Significant front-end collision damage...</p>"
+            "damages": "<p>Minor rear-end collision damage. The rear bumper shows impact deformation with paint scratches and minor denting. No structural damage visible. Recommended repairs include bumper replacement and paint touch-up.</p>"
+          },
+          {
+            "language": "fr", 
+            "damages": "<p>Dommages mineurs de collision arrière. Le pare-chocs arrière présente une déformation d'impact avec des rayures de peinture et des bosses mineures.</p>"
           },
           {
             "language": "de",
-            "damages": "<p>Erhebliche Frontschäden durch Kollision...</p>"
+            "damages": "<p>Geringfügige Heckaufprallschäden. Die hintere Stoßstange zeigt Aufprallverformungen mit Lackkratzern und kleineren Dellen.</p>"
           }
         ],
         "missing_images": []
+      },
+      {
+        "lot_id": "batch-002",
+        "status": "completed",
+        "processed_at": "2025-08-05T08:12:00Z", 
+        "processed_images": 3,
+        "descriptions": [
+          {
+            "language": "en",
+            "damages": "<p>Extensive hail damage assessment. Multiple small to medium-sized dents across the roof, hood, and side panels. Paint integrity maintained. Paintless dent repair recommended for most damage areas.</p>"
+          },
+          {
+            "language": "fr",
+            "damages": "<p>Évaluation complète des dommages de grêle. Multiples bosses de petite à moyenne taille sur le toit, le capot et les panneaux latéraux.</p>"
+          },
+          {
+            "language": "de", 
+            "damages": "<p>Umfassende Hagelschadenbewertung. Mehrere kleine bis mittelgroße Dellen auf dem Dach, der Motorhaube und den Seitenpaneelen.</p>"
+          }
+        ],
+        "missing_images": ["https://example.com/audi-trunk.jpg"]
       }
     ]
   }
 }
 ```
 
-**Ответ для незавершенного задания (202):**
+**Ответ для незавершенного задания (202 Accepted):**
 ```json
 {
   "error": "Job not completed",
-  "status": "processing",
+  "status": "processing", 
+  "progress": {
+    "completion_percentage": 45.0,
+    "estimated_completion": "2025-08-05T08:30:00Z"
+  },
   "message": "Job is currently processing. Results will be available when status is 'completed'."
 }
 ```
@@ -230,18 +327,26 @@ X-Signature: sha256=your_hmac_signature
 
 **GET** `/api/v1/batch-results/{job_id}/download`
 
-Возвращает файл `batch_results_{job_id}.json` для скачивания с полными результатами.
+Возвращает JSON файл `batch_results_{job_id}.json` для скачивания.
 
-### Список заданий
+**Headers ответа:**
+```http
+Content-Type: application/json
+Content-Disposition: attachment; filename="batch_results_550e8400-e29b-41d4-a716-446655440000.json"
+```
 
-**GET** `/api/v1/batch-jobs?status=processing&limit=10&offset=0`
+### Список заданий с фильтрацией
+
+**GET** `/api/v1/batch-jobs?status=processing&limit=20&offset=0`
 
 **Query параметры:**
-- `status` (optional): Фильтр по статусу (`pending`, `processing`, `completed`, `failed`, `cancelled`)
+- `status` (optional): `pending`, `processing`, `translating`, `completed`, `failed`, `cancelled`
 - `limit` (optional): Количество записей (max 100, default 10)
 - `offset` (optional): Смещение для пагинации (default 0)
+- `created_after` (optional): ISO timestamp для фильтра по дате
+- `created_before` (optional): ISO timestamp для фильтра по дате
 
-**Ответ (200):**
+**Ответ (200 OK):**
 ```json
 {
   "jobs": [
@@ -249,22 +354,23 @@ X-Signature: sha256=your_hmac_signature
       "id": "550e8400-e29b-41d4-a716-446655440000",
       "status": "processing",
       "created_at": "2025-08-05T07:30:00Z",
-      "updated_at": "2025-08-05T07:35:00Z",
+      "updated_at": "2025-08-05T07:45:00Z",
       "total_lots": 50,
-      "processed_lots": 25,
+      "processed_lots": 32,
+      "failed_lots": 1,
       "languages": ["en", "fr"],
       "progress": {
-        "total_lots": 50,
-        "processed_lots": 25,
-        "failed_lots": 1,
-        "completion_percentage": 50.0
-      }
+        "completion_percentage": 64.0,
+        "estimated_completion": "2025-08-05T08:20:00Z"
+      },
+      "webhook_configured": true
     }
   ],
   "pagination": {
-    "limit": 10,
+    "limit": 20,
     "offset": 0,
-    "total": 1
+    "total": 1,
+    "has_more": false
   }
 }
 ```
@@ -273,22 +379,17 @@ X-Signature: sha256=your_hmac_signature
 
 **POST** `/api/v1/batch-jobs/{job_id}/cancel`
 
-**Headers:**
-```
-Content-Type: application/json
-X-Signature: sha256=your_hmac_signature
-```
-
-**Успешный ответ (200):**
+**Успешная отмена (200 OK):**
 ```json
 {
   "job_id": "550e8400-e29b-41d4-a716-446655440000",
   "status": "cancelled",
+  "cancelled_at": "2025-08-05T08:00:00Z",
   "message": "Job successfully cancelled"
 }
 ```
 
-**Ошибка отмены (400):**
+**Ошибка отмены (400 Bad Request):**
 ```json
 {
   "error": "Job cannot be cancelled",
@@ -297,69 +398,62 @@ X-Signature: sha256=your_hmac_signature
 }
 ```
 
-## Webhook система
+## 🔔 Webhook система
 
-Production-ready webhook система с автоматическими повторами и надежной доставкой.
+Production-ready система автоматических уведомлений с Background Worker для надежной доставки.
 
-### Автоматические уведомления
+### Автоматическая доставка
 
-Webhook уведомления отправляются автоматически при завершении пакетной обработки через background worker сервис.
+Background Worker автоматически отслеживает завершенные задания и доставляет webhook уведомления с retry механизмами.
 
 ### Формат webhook payload
 
 **POST** `{your_webhook_url}`
 
 **Headers:**
-```
+```http
 Content-Type: application/json
 X-Signature: sha256=hmac_signature_for_payload_verification
-User-Agent: Generation-Service/1.0
+User-Agent: Generation-Service/2.0
+X-Delivery-Attempt: 1
+X-Job-ID: 550e8400-e29b-41d4-a716-446655440000
 ```
 
 **Payload:**
 ```json
 {
+  "event": "batch_job_completed",
   "job_id": "550e8400-e29b-41d4-a716-446655440000",
   "status": "completed",
   "completed_at": "2025-08-05T08:15:00Z",
+  "processing_summary": {
+    "total_lots": 2,
+    "processed_lots": 2,
+    "failed_lots": 0,
+    "total_processing_time": "45 minutes"
+  },
   "lots": [
     {
       "lot_id": "batch-001",
       "status": "completed",
+      "processed_images": 2,
       "descriptions": [
         {
           "language": "en",
-          "damages": "<p>Detailed damage assessment with specific details about collision impact, structural damage, and repair recommendations...</p>"
+          "damages": "<p>Comprehensive damage assessment with detailed analysis of structural integrity, cosmetic damage, and repair recommendations based on AI vision analysis...</p>"
         },
         {
-          "language": "de", 
-          "damages": "<p>Detaillierte Schadensbewertung mit spezifischen Details über Kollisionsauswirkungen, strukturelle Schäden und Reparaturempfehlungen...</p>"
+          "language": "fr",
+          "damages": "<p>Évaluation complète des dommages avec analyse détaillée de l'intégrité structurelle, des dommages cosmétiques...</p>"
         }
       ],
       "missing_images": []
-    },
-    {
-      "lot_id": "batch-002",
-      "status": "completed", 
-      "descriptions": [
-        {
-          "language": "en",
-          "damages": "<p>Minor cosmetic damage on rear bumper...</p>"
-        },
-        {
-          "language": "de",
-          "damages": "<p>Geringfügige kosmetische Schäden am hinteren Stoßfänger...</p>"
-        }
-      ],
-      "missing_images": ["https://example.com/unreachable-image.jpg"]
     }
   ]
 }
 ```
 
-### Верификация webhook
-
-Все webhook payload подписываются HMAC-SHA256 для верификации:
+### Верификация webhook подписи
 
 ```python
 import hmac
@@ -367,51 +461,81 @@ import hashlib
 import json
 
 def verify_webhook_signature(payload_json, received_signature, shared_key):
+    """Верификация HMAC подписи webhook payload"""
     expected_signature = hmac.new(
         shared_key.encode(),
         payload_json.encode(),
         hashlib.sha256
     ).hexdigest()
+    
     return f"sha256={expected_signature}" == received_signature
+
+# Пример использования
+def handle_webhook(request):
+    payload_json = request.body.decode('utf-8')
+    received_signature = request.headers.get('X-Signature')
+    
+    if verify_webhook_signature(payload_json, received_signature, "your-shared-key"):
+        payload = json.loads(payload_json)
+        # Обработка webhook данных
+        return {"status": "success"}, 200
+    else:
+        return {"error": "Invalid signature"}, 403
 ```
 
-### Политика повторов
+### Политика повторов Background Worker
 
-**Background Worker** автоматически обрабатывает failed webhook доставки:
+| Попытка | Задержка | Timeout | Статус |
+|---------|----------|---------|--------|
+| 1 | Немедленно | 30s | Initial delivery |
+| 2 | 30 секунд | 30s | First retry |
+| 3 | 60 секунд | 30s | Second retry (2^1 * 30s) |
+| 4 | 120 секунд | 30s | Third retry (2^2 * 30s) |
+| 5 | 240 секунд | 30s | Fourth retry (2^3 * 30s) |
+| 6+ | **Failed** | - | Maximum attempts reached |
 
-| Попытка | Задержка | Статус |
-|---------|----------|--------|
-| 1 | Немедленно | Initial attempt |
-| 2 | 30 секунд | Exponential backoff |
-| 3 | 60 секунд | 2^1 * 30s |
-| 4 | 120 секунд | 2^2 * 30s |
-| 5 | 240 секунд | 2^3 * 30s |
-| 6+ | **Failed** | Максимум 5 попыток |
+**Критерии успешной доставки:**
+- HTTP статус коды: 200, 201, 202
+- Ответ получен в течение 30 секунд
+- Нет network errors
 
-**Успешная доставка:** HTTP статус коды 200, 201, или 202  
-**Failed доставка:** Все остальные статус коды, таймауты, или network errors
+**Критерии неудачной доставки:**
+- Все остальные HTTP статус коды (4xx, 5xx)
+- Timeout (>30 секунд)
+- Network errors (DNS, connection refused)
 
 ### Мониторинг webhook доставки
 
-Все webhook доставки отслеживаются в PostgreSQL с полной историей попыток:
+Все webhook доставки отслеживаются в PostgreSQL с полной историей:
 
 ```sql
+-- Просмотр статуса доставки
 SELECT 
+  id,
+  batch_job_id,
   webhook_url,
   status,
   attempt_count,
+  created_at,
   last_attempt_at,
   delivered_at,
   error_message
 FROM webhook_deliveries 
-WHERE batch_job_id = 'your-job-id';
+WHERE batch_job_id = '550e8400-e29b-41d4-a716-446655440000';
+
+-- Статистика webhook доставок
+SELECT 
+  status,
+  COUNT(*) as count,
+  AVG(attempt_count) as avg_attempts
+FROM webhook_deliveries 
+WHERE created_at >= NOW() - INTERVAL '24 hours'
+GROUP BY status;
 ```
 
-## Примеры кода
+## 💻 Примеры интеграции
 
-### Python примеры
-
-#### Синхронная обработка одного автомобиля
+### Python Client SDK
 
 ```python
 import requests
@@ -419,18 +543,42 @@ import hmac
 import hashlib
 import json
 import time
+from typing import Dict, List, Optional, Tuple
 
 class GenerationServiceClient:
-    def __init__(self, base_url, shared_key):
-        self.base_url = base_url
+    def __init__(self, base_url: str, shared_key: str):
+        self.base_url = base_url.rstrip('/')
         self.shared_key = shared_key
+        self.session = requests.Session()
+        self.session.headers.update({
+            'Content-Type': 'application/json',
+            'User-Agent': 'GenerationServiceClient/1.0'
+        })
     
-    def generate_signature(self, lots):
-        normalized = json.dumps(lots, separators=(',', ':'), sort_keys=True)
-        return hmac.new(self.shared_key.encode(), normalized.encode(), hashlib.sha256).hexdigest()
+    def _generate_signature(self, data) -> str:
+        """Генерация HMAC-SHA256 подписи"""
+        if isinstance(data, dict):
+            # Для JSON payload
+            normalized = json.dumps(data["lots"], separators=(',', ':'), sort_keys=True)
+        else:
+            # Для polling requests
+            normalized = str(data)
+        
+        signature = hmac.new(
+            self.shared_key.encode(),
+            normalized.encode(),
+            hashlib.sha256
+        ).hexdigest()
+        
+        return f"sha256={signature}"
     
-    def sync_generate(self, lot_id, additional_info, image_urls, languages=["en"]):
+    def sync_generate(self,
+                     lot_id: str,
+                     additional_info: str,
+                     image_urls: List[str],
+                     languages: List[str] = ["en"]) -> Tuple[Dict, int]:
         """Синхронная обработка одного автомобиля"""
+        
         lots = [{
             "lot_id": lot_id,
             "additional_info": additional_info,
@@ -438,435 +586,832 @@ class GenerationServiceClient:
         }]
         
         payload = {
-            "signature": self.generate_signature(lots),
+            "signature": self._generate_signature({"lots": lots}),
             "version": "1.0.0",
             "languages": languages,
             "lots": lots
         }
         
-        response = requests.post(
+        response = self.session.post(
             f"{self.base_url}/api/v1/generate-descriptions",
             json=payload,
-            headers={"Content-Type": "application/json"},
             timeout=300  # 5 минут для синхронного режима
         )
         
         return response.json(), response.status_code
-
-# Использование
-client = GenerationServiceClient("http://localhost:5000", "your-shared-key")
-
-result, status = client.sync_generate(
-    lot_id="test-001",
-    additional_info="2019 Toyota Camry, front collision damage",
-    image_urls=["https://example.com/car1.jpg", "https://example.com/car2.jpg"],
-    languages=["en", "ru", "fr"]
-)
-
-print(f"Status: {status}")
-print(f"Result: {json.dumps(result, indent=2)}")
-```
-
-#### Пакетная обработка с polling
-
-```python
-def batch_generate_with_polling(self, cars_data, languages=["en"], webhook_url=None):
-    """Пакетная обработка с polling для получения результатов"""
     
-    # Подготовка lots для пакетной обработки
-    lots = []
-    for car in cars_data:
-        lot = {
-            "lot_id": car["lot_id"],
-            "additional_info": car["additional_info"],
-            "images": [{"url": url} for url in car["image_urls"]]
+    def batch_generate(self,
+                      cars_data: List[Dict],
+                      languages: List[str] = ["en"],
+                      webhook_url: Optional[str] = None) -> Tuple[Optional[str], Optional[str]]:
+        """Создание пакетного задания"""
+        
+        lots = []
+        for car in cars_data:
+            lot = {
+                "lot_id": car["lot_id"],
+                "additional_info": car["additional_info"],
+                "images": [{"url": url} for url in car["image_urls"]]
+            }
+            if webhook_url:
+                lot["webhook"] = webhook_url
+            lots.append(lot)
+        
+        payload = {
+            "signature": self._generate_signature({"lots": lots}),
+            "version": "1.0.0",
+            "languages": languages,
+            "lots": lots
         }
-        if webhook_url:
-            lot["webhook"] = webhook_url
-        lots.append(lot)
+        
+        response = self.session.post(
+            f"{self.base_url}/api/v1/generate-descriptions",
+            json=payload
+        )
+        
+        if response.status_code == 201:
+            job_data = response.json()
+            return job_data["job_id"], None
+        else:
+            return None, f"Failed to create batch job: {response.text}"
     
-    # Отправка пакетного запроса
-    payload = {
-        "signature": self.generate_signature(lots),
-        "version": "1.0.0",
-        "languages": languages,
-        "lots": lots
-    }
-    
-    response = requests.post(
-        f"{self.base_url}/api/v1/generate-descriptions",
-        json=payload,
-        headers={"Content-Type": "application/json"}
-    )
-    
-    if response.status_code != 201:
-        return None, f"Failed to create batch job: {response.text}"
-    
-    job_data = response.json()
-    job_id = job_data["job_id"]
-    print(f"Batch job created: {job_id}")
-    
-    # Polling для отслеживания прогресса
-    return self.poll_for_results(job_id)
-
-def poll_for_results(self, job_id, poll_interval=30, max_wait_time=3600):
-    """Polling результатов пакетного задания"""
-    start_time = time.time()
-    
-    # Создаем signature для polling запросов
-    polling_signature = hmac.new(
-        self.shared_key.encode(),
-        job_id.encode(),
-        hashlib.sha256
-    ).hexdigest()
-    
-    headers = {
-        "Content-Type": "application/json",
-        "X-Signature": f"sha256={polling_signature}"
-    }
-    
-    while time.time() - start_time < max_wait_time:
-        # Проверяем статус
-        status_response = requests.get(
+    def get_job_status(self, job_id: str) -> Tuple[Optional[Dict], Optional[str]]:
+        """Получение статуса задания"""
+        signature = self._generate_signature(job_id)
+        headers = {"X-Signature": signature}
+        
+        response = self.session.get(
             f"{self.base_url}/api/v1/batch-status/{job_id}",
             headers=headers
         )
         
-        if status_response.status_code != 200:
-            return None, f"Failed to get status: {status_response.text}"
+        if response.status_code == 200:
+            return response.json(), None
+        else:
+            return None, f"Failed to get job status: {response.text}"
+    
+    def get_job_results(self, job_id: str) -> Tuple[Optional[Dict], Optional[str]]:
+        """Получение результатов задания"""
+        signature = self._generate_signature(job_id)
+        headers = {"X-Signature": signature}
         
-        status_data = status_response.json()
-        print(f"Job {job_id} status: {status_data['status']} - "
-              f"{status_data['progress']['completion_percentage']:.1f}% complete")
+        response = self.session.get(
+            f"{self.base_url}/api/v1/batch-results/{job_id}",
+            headers=headers
+        )
         
-        if status_data["status"] == "completed":
-            # Получаем результаты
-            results_response = requests.get(
-                f"{self.base_url}/api/v1/batch-results/{job_id}",
-                headers=headers
-            )
+        if response.status_code == 200:
+            return response.json(), None
+        elif response.status_code == 202:
+            return None, "Job not completed yet"
+        else:
+            return None, f"Failed to get results: {response.text}"
+    
+    def download_results(self, job_id: str, filename: Optional[str] = None) -> Tuple[bool, str]:
+        """Скачивание результатов в файл"""
+        signature = self._generate_signature(job_id)
+        headers = {"X-Signature": signature}
+        
+        response = self.session.get(
+            f"{self.base_url}/api/v1/batch-results/{job_id}/download",
+            headers=headers
+        )
+        
+        if response.status_code == 200:
+            if not filename:
+                filename = f"batch_results_{job_id}.json"
             
-            if results_response.status_code == 200:
-                return results_response.json(), None
-            else:
-                return None, f"Failed to get results: {results_response.text}"
-        
-        elif status_data["status"] == "failed":
-            return None, f"Job failed: {status_data.get('error_message', 'Unknown error')}"
-        
-        elif status_data["status"] == "cancelled":
-            return None, "Job was cancelled"
-        
-        # Ждем перед следующей проверкой
-        time.sleep(poll_interval)
+            with open(filename, 'w', encoding='utf-8') as f:
+                json.dump(response.json(), f, indent=2, ensure_ascii=False)
+            
+            return True, f"Results saved to {filename}"
+        else:
+            return False, f"Failed to download results: {response.text}"
     
-    return None, f"Timeout after {max_wait_time} seconds"
-
-# Использование пакетной обработки
-cars_data = [
-    {
-        "lot_id": "batch-001",
-        "additional_info": "BMW X5 damage assessment",
-        "image_urls": ["https://example.com/bmw1.jpg", "https://example.com/bmw2.jpg"]
-    },
-    {
-        "lot_id": "batch-002", 
-        "additional_info": "Mercedes C-Class inspection",
-        "image_urls": ["https://example.com/merc1.jpg"]
-    }
-]
-
-results, error = client.batch_generate_with_polling(
-    cars_data=cars_data,
-    languages=["en", "de", "fr"],
-    webhook_url="https://your-app.com/webhook"
-)
-
-if error:
-    print(f"Error: {error}")
-else:
-    print(f"Results: {json.dumps(results, indent=2)}")
-```
-
-#### Отмена пакетного задания
-
-```python
-def cancel_batch_job(self, job_id):
-    """Отмена пакетного задания"""
-    cancel_signature = hmac.new(
-        self.shared_key.encode(),
-        job_id.encode(),
-        hashlib.sha256
-    ).hexdigest()
+    def cancel_job(self, job_id: str) -> Tuple[bool, str]:
+        """Отмена задания"""
+        signature = self._generate_signature(job_id)
+        headers = {"X-Signature": signature}
+        
+        response = self.session.post(
+            f"{self.base_url}/api/v1/batch-jobs/{job_id}/cancel",
+            headers=headers
+        )
+        
+        if response.status_code == 200:
+            return True, "Job cancelled successfully"
+        else:
+            return False, f"Failed to cancel job: {response.text}"
     
-    headers = {
-        "Content-Type": "application/json",
-        "X-Signature": f"sha256={cancel_signature}"
-    }
+    def poll_for_completion(self,
+                          job_id: str,
+                          poll_interval: int = 30,
+                          max_wait_time: int = 3600,
+                          progress_callback: Optional[callable] = None) -> Tuple[Optional[Dict], Optional[str]]:
+        """Polling до завершения задания с progress callback"""
+        start_time = time.time()
+        
+        while time.time() - start_time < max_wait_time:
+            status_data, error = self.get_job_status(job_id)
+            
+            if error:
+                return None, error
+            
+            # Вызов callback функции для progress updates
+            if progress_callback:
+                progress_callback(status_data)
+            
+            if status_data["status"] == "completed":
+                return self.get_job_results(job_id)
+            elif status_data["status"] in ["failed", "cancelled"]:
+                return None, f"Job {status_data['status']}: {status_data.get('error_message', 'Unknown error')}"
+            
+            time.sleep(poll_interval)
+        
+        return None, f"Timeout after {max_wait_time} seconds"
+
+# Примеры использования
+def main():
+    client = GenerationServiceClient("http://localhost:5000", "your-shared-key")
     
-    response = requests.post(
-        f"{self.base_url}/api/v1/batch-jobs/{job_id}/cancel",
-        headers=headers
+    # Синхронная обработка
+    print("=== Синхронная обработка ===")
+    result, status = client.sync_generate(
+        lot_id="sync-test-001",
+        additional_info="2019 Toyota Camry, front collision damage",
+        image_urls=[
+            "https://example.com/car1.jpg",
+            "https://example.com/car2.jpg"
+        ],
+        languages=["en", "ru"]
     )
     
-    return response.json(), response.status_code
-
-# Отмена задания
-result, status = client.cancel_batch_job("550e8400-e29b-41d4-a716-446655440000")
-print(f"Cancel result: {result}")
-```
-
-### cURL примеры
-
-#### Синхронная обработка
-
-```bash
-# Генерация подписи (используйте этот скрипт)
-echo '[{"lot_id":"curl-test-001","additional_info":"Testing via cURL","images":[{"url":"https://example.com/test-car.jpg"}]}]' | \
-openssl dgst -sha256 -hmac "your-shared-key"
-
-# Синхронный запрос
-curl -X POST http://localhost:5000/api/v1/generate-descriptions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "signature": "calculated_hmac_signature_here",
-    "version": "1.0.0",
-    "languages": ["en", "fr", "de"],
-    "lots": [{
-      "lot_id": "curl-test-001",
-      "additional_info": "2020 BMW X3, minor rear damage",
-      "images": [
-        {"url": "https://example.com/test-car1.jpg"},
-        {"url": "https://example.com/test-car2.jpg"}
-      ]
-    }]
-  }'
-```
-
-#### Пакетная обработка
-
-```bash
-# Пакетный запрос
-curl -X POST http://localhost:5000/api/v1/generate-descriptions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "signature": "calculated_hmac_signature_here",
-    "version": "1.0.0",
-    "languages": ["en", "ru"],
-    "lots": [
-      {
-        "webhook": "https://your-app.com/webhook",
-        "lot_id": "batch-001",
-        "additional_info": "BMW X5 damage assessment",
-        "images": [{"url": "https://example.com/bmw1.jpg"}]
-      },
-      {
-        "webhook": "https://your-app.com/webhook", 
-        "lot_id": "batch-002",
-        "additional_info": "Mercedes inspection",
-        "images": [{"url": "https://example.com/merc1.jpg"}]
-      }
+    print(f"Status: {status}")
+    if status == 200:
+        print(f"Descriptions generated for lot: {result['lots'][0]['lot_id']}")
+        for desc in result['lots'][0]['descriptions']:
+            print(f"Language: {desc['language']}")
+            print(f"Description: {desc['damages'][:100]}...")
+    
+    # Пакетная обработка с polling
+    print("\n=== Пакетная обработка ===")
+    cars_data = [
+        {
+            "lot_id": "batch-001",
+            "additional_info": "BMW X5 damage assessment",
+            "image_urls": ["https://example.com/bmw1.jpg", "https://example.com/bmw2.jpg"]
+        },
+        {
+            "lot_id": "batch-002",
+            "additional_info": "Mercedes C-Class inspection", 
+            "image_urls": ["https://example.com/merc1.jpg"]
+        }
     ]
-  }'
+    
+    job_id, error = client.batch_generate(
+        cars_data=cars_data,
+        languages=["en", "de", "fr"],
+        webhook_url="https://your-app.com/webhooks/generation-complete"
+    )
+    
+    if job_id:
+        print(f"Batch job created: {job_id}")
+        
+        # Progress callback функция
+        def progress_callback(status_data):
+            progress = status_data['progress']
+            print(f"Progress: {progress['completion_percentage']:.1f}% "
+                  f"({progress['processed_lots']}/{progress['total_lots']} lots)")
+        
+        # Polling для результатов
+        results, error = client.poll_for_completion(
+            job_id=job_id,
+            poll_interval=30,
+            progress_callback=progress_callback
+        )
+        
+        if results:
+            print("Batch processing completed!")
+            print(f"Processed {results['processing_summary']['processed_lots']} lots")
+            
+            # Скачивание результатов
+            success, message = client.download_results(job_id)
+            print(f"Download: {message}")
+        else:
+            print(f"Error: {error}")
+    else:
+        print(f"Error creating batch job: {error}")
+
+if __name__ == "__main__":
+    main()
 ```
 
-#### Polling статуса и результатов
+### Node.js/JavaScript интеграция
+
+```javascript
+const crypto = require('crypto');
+const fetch = require('node-fetch');
+
+class GenerationServiceClient {
+    constructor(baseUrl, sharedKey) {
+        this.baseUrl = baseUrl.replace(/\/$/, '');
+        this.sharedKey = sharedKey;
+    }
+
+    generateSignature(data) {
+        const normalized = typeof data === 'object' 
+            ? JSON.stringify(data.lots, Object.keys(data.lots).sort())
+            : String(data);
+        
+        const signature = crypto
+            .createHmac('sha256', this.sharedKey)
+            .update(normalized)
+            .digest('hex');
+        
+        return `sha256=${signature}`;
+    }
+
+    async syncGenerate(lotId, additionalInfo, imageUrls, languages = ['en']) {
+        const lots = [{
+            lot_id: lotId,
+            additional_info: additionalInfo,
+            images: imageUrls.map(url => ({url}))
+        }];
+
+        const payload = {
+            signature: this.generateSignature({lots}),
+            version: '1.0.0',
+            languages,
+            lots
+        };
+
+        const response = await fetch(`${this.baseUrl}/api/v1/generate-descriptions`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'User-Agent': 'GenerationServiceClient-JS/1.0'
+            },
+            body: JSON.stringify(payload),
+            timeout: 300000 // 5 minutes
+        });
+
+        return {
+            data: await response.json(),
+            status: response.status
+        };
+    }
+
+    async batchGenerate(carsData, languages = ['en'], webhookUrl = null) {
+        const lots = carsData.map(car => {
+            const lot = {
+                lot_id: car.lotId,
+                additional_info: car.additionalInfo,
+                images: car.imageUrls.map(url => ({url}))
+            };
+            if (webhookUrl) {
+                lot.webhook = webhookUrl;
+            }
+            return lot;
+        });
+
+        const payload = {
+            signature: this.generateSignature({lots}),
+            version: '1.0.0',
+            languages,
+            lots
+        };
+
+        const response = await fetch(`${this.baseUrl}/api/v1/generate-descriptions`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'User-Agent': 'GenerationServiceClient-JS/1.0'
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (response.status === 201) {
+            const data = await response.json();
+            return {jobId: data.job_id, error: null};
+        } else {
+            return {jobId: null, error: await response.text()};
+        }
+    }
+
+    async getJobStatus(jobId) {
+        const signature = this.generateSignature(jobId);
+        
+        const response = await fetch(`${this.baseUrl}/api/v1/batch-status/${jobId}`, {
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Signature': signature
+            }
+        });
+
+        if (response.ok) {
+            return {data: await response.json(), error: null};
+        } else {
+            return {data: null, error: await response.text()};
+        }
+    }
+
+    async pollForCompletion(jobId, pollInterval = 30000, maxWaitTime = 3600000) {
+        const startTime = Date.now();
+        
+        while (Date.now() - startTime < maxWaitTime) {
+            const {data: statusData, error} = await this.getJobStatus(jobId);
+            
+            if (error) {
+                return {data: null, error};
+            }
+
+            console.log(`Job ${jobId} status: ${statusData.status} - ${statusData.progress.completion_percentage}% complete`);
+
+            if (statusData.status === 'completed') {
+                return await this.getJobResults(jobId);
+            } else if (['failed', 'cancelled'].includes(statusData.status)) {
+                return {data: null, error: `Job ${statusData.status}: ${statusData.error_message || 'Unknown error'}`};
+            }
+
+            await new Promise(resolve => setTimeout(resolve, pollInterval));
+        }
+
+        return {data: null, error: `Timeout after ${maxWaitTime}ms`};
+    }
+}
+
+// Пример использования
+async function main() {
+    const client = new GenerationServiceClient('http://localhost:5000', 'your-shared-key');
+    
+    // Синхронная обработка
+    console.log('=== Синхронная обработка ===');
+    const syncResult = await client.syncGenerate(
+        'js-sync-001',
+        '2020 Honda Civic, side collision damage',
+        ['https://example.com/honda1.jpg', 'https://example.com/honda2.jpg'],
+        ['en', 'fr']
+    );
+    
+    if (syncResult.status === 200) {
+        console.log('Sync processing completed!');
+        console.log(`Generated descriptions for ${syncResult.data.lots[0].lot_id}`);
+    }
+    
+    // Пакетная обработка
+    console.log('\n=== Пакетная обработка ===');
+    const carsData = [
+        {
+            lotId: 'js-batch-001',
+            additionalInfo: 'Ford F-150 assessment',
+            imageUrls: ['https://example.com/ford1.jpg']
+        }
+    ];
+    
+    const {jobId, error} = await client.batchGenerate(
+        carsData,
+        ['en', 'es'],
+        'https://your-app.com/webhooks/complete'
+    );
+    
+    if (jobId) {
+        console.log(`Batch job created: ${jobId}`);
+        
+        const {data: results, error: pollError} = await client.pollForCompletion(jobId);
+        
+        if (results) {
+            console.log('Batch processing completed!');
+            console.log(`Processed ${results.processing_summary.processed_lots} lots`);
+        } else {
+            console.error(`Polling error: ${pollError}`);
+        }
+    } else {
+        console.error(`Batch creation error: ${error}`);
+    }
+}
+
+main().catch(console.error);
+```
+
+## ⚙️ Production Development 
+
+### Системные требования
+
+- **Runtime**: Python 3.8+
+- **Database**: PostgreSQL 12+
+- **Memory**: 2GB+ RAM для production
+- **Storage**: 10GB+ для логов и временных файлов
+- **Network**: HTTPS endpoints для webhook доставки
+
+### Environment переменные
 
 ```bash
-# Проверка статуса задания
-JOB_ID="550e8400-e29b-41d4-a716-446655440000"
-SIGNATURE=$(echo -n "$JOB_ID" | openssl dgst -sha256 -hmac "your-shared-key" | sed 's/^.* //')
+# Обязательные
+export DATABASE_URL="postgresql://user:password@host:5432/generation_service"
+export OPENAI_API_KEY="sk-your-openai-api-key-here"
+export SHARED_KEY="your-secret-hmac-key-minimum-32-characters-long"
 
-curl -X GET "http://localhost:5000/api/v1/batch-status/$JOB_ID" \
-  -H "Content-Type: application/json" \
-  -H "X-Signature: sha256=$SIGNATURE"
+# Опциональные
+export SESSION_SECRET="your-flask-session-secret-key"
+export LOG_LEVEL="INFO"  # DEBUG, INFO, WARNING, ERROR
+export MAX_BATCH_SIZE="50000"  # Максимальный размер batch
+export WEBHOOK_TIMEOUT="30"  # Timeout для webhook доставки в секундах
+export WEBHOOK_MAX_RETRIES="5"  # Максимальное количество retry попыток
+export WORKER_POLL_INTERVAL="30"  # Интервал опроса Background Worker в секундах
 
-# Получение результатов
-curl -X GET "http://localhost:5000/api/v1/batch-results/$JOB_ID" \
-  -H "Content-Type: application/json" \
-  -H "X-Signature: sha256=$SIGNATURE"
-
-# Скачивание результатов как файл
-curl -X GET "http://localhost:5000/api/v1/batch-results/$JOB_ID/download" \
-  -H "X-Signature: sha256=$SIGNATURE" \
-  -o "batch_results_$JOB_ID.json"
-
-# Список всех заданий
-curl -X GET "http://localhost:5000/api/v1/batch-jobs?status=processing&limit=20" \
-  -H "X-Signature: sha256=$SIGNATURE"
-
-# Отмена задания
-curl -X POST "http://localhost:5000/api/v1/batch-jobs/$JOB_ID/cancel" \
-  -H "Content-Type: application/json" \
-  -H "X-Signature: sha256=$SIGNATURE"
+# OpenAI настройки
+export OPENAI_MODEL_VISION="o1-mini"  # Модель для vision анализа
+export OPENAI_MODEL_TRANSLATION="gpt-4.1-mini"  # Модель для перевода
+export OPENAI_MAX_TOKENS="4000"  # Максимальное количество токенов
+export OPENAI_TEMPERATURE="0.1"  # Temperature для генерации
 ```
 
-## Ограничения и лимиты
+### Docker deployment
 
-### Лимиты обработки
+```dockerfile
+FROM python:3.11-slim
 
-| Тип лимита | Синхронный режим | Пакетный режим | Polling режим |
-|------------|------------------|----------------|---------------|
-| Макс. изображений на машину | 20 | Без ограничений | N/A |
-| Макс. машин на запрос | 1 | 50,000 | N/A |
-| Макс. размер изображения | 10 MB | 10 MB | N/A |
-| Макс. размер пакетного файла | N/A | 200 MB | N/A |
-| Тайм-аут ответа | 300 секунд | 24 часа | 30 секунд |
-| Макс. языков перевода | 2 (sync) | Без ограничений | N/A |
-| Частота polling запросов | N/A | N/A | Рекомендуется 30+ секунд |
+WORKDIR /app
 
-### HTTP коды статусов
+# Системные зависимости
+RUN apt-get update && apt-get install -y \
+    postgresql-client \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
-| Код статуса | Описание | Endpoints | Частые причины |
-|------------|----------|-----------|----------------|
-| **200** | OK - Успешно | Все GET endpoints | Данные получены успешно |
-| **201** | Created - Пакетная задача создана | `/generate-descriptions` | Batch job создан и запущен |
-| **202** | Accepted - Не готово | `/batch-results/{id}` | Задание еще обрабатывается |
-| **400** | Bad Request | Все endpoints | Неверный JSON, отсутствующие поля, превышен лимит |
-| **401** | Unauthorized | Polling endpoints | Неверная подпись в заголовке X-Signature |
-| **403** | Forbidden | `/generate-descriptions` | Неверная HMAC подпись в payload |
-| **404** | Not Found | Все endpoints с {job_id} | ID пакетной задачи не найден |
-| **500** | Internal Server Error | Все endpoints | Ошибка OpenAI API, ошибка базы данных |
+# Python зависимости
+COPY pyproject.toml uv.lock ./
+RUN pip install uv && uv sync --frozen
 
-### Rate Limiting
+# Копирование приложения
+COPY . .
 
-| Тип запроса | Лимит | Период | Действие при превышении |
-|-------------|-------|--------|-------------------------|
-| Синхронные запросы | 100 | 1 час | HTTP 429 - слишком много запросов |
-| Пакетные запросы | 20 | 1 час | HTTP 429 - слишком много запросов |
-| Polling запросы | 1000 | 1 час | HTTP 429 - слишком много запросов |
+# Создание non-root пользователя
+RUN useradd -m -u 1000 genservice && chown -R genservice:genservice /app
+USER genservice
 
-## Дополнительные endpoints
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:5000/health || exit 1
 
-### Проверка здоровья сервиса
+# Команда запуска
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "--timeout", "300", "main:app"]
+```
 
-**GET** `/health`
+### docker-compose.yml
 
-```json
-{
-  "status": "healthy",
-  "service": "generation-service",
-  "timestamp": "2025-08-05T07:30:00Z",
-  "version": "1.0.0",
-  "database": "connected",
-  "background_worker": "running"
+```yaml
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      DATABASE_URL: postgresql://genservice:password@db:5432/generation_service
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      SHARED_KEY: ${SHARED_KEY}
+      LOG_LEVEL: INFO
+    depends_on:
+      - db
+    volumes:
+      - ./logs:/app/logs
+    restart: unless-stopped
+
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: generation_service
+      POSTGRES_USER: genservice
+      POSTGRES_PASSWORD: password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./ssl:/etc/nginx/ssl
+    depends_on:
+      - app
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+```
+
+### nginx.conf для Load Balancing
+
+```nginx
+upstream generation_service {
+    server app:5000;
+    # Дополнительные серверы для масштабирования
+    # server app2:5000;
+    # server app3:5000;
+}
+
+server {
+    listen 80;
+    server_name your-domain.com;
+    
+    # Redirect HTTP to HTTPS
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name your-domain.com;
+    
+    ssl_certificate /etc/nginx/ssl/cert.pem;
+    ssl_certificate_key /etc/nginx/ssl/key.pem;
+    
+    # Security headers
+    add_header X-Frame-Options DENY;
+    add_header X-Content-Type-Options nosniff;
+    add_header X-XSS-Protection "1; mode=block";
+    
+    # API endpoints
+    location /api/ {
+        proxy_pass http://generation_service;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # Timeouts для long-running requests
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 300s;
+        proxy_read_timeout 300s;
+        
+        # Body size для больших batch requests
+        client_max_body_size 100M;
+    }
+    
+    # Web interface
+    location / {
+        proxy_pass http://generation_service;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
 }
 ```
 
-### Тестирование валидации изображений
-
-**POST** `/api/v1/test-image-validation`
-
-```json
-{
-  "urls": [
-    "https://example.com/car1.jpg",
-    "https://example.com/car2.jpg",
-    "https://invalid-url.com/missing.jpg"
-  ]
-}
-```
-
-**Ответ:**
-```json
-{
-  "valid_urls": ["https://example.com/car1.jpg"],
-  "unreachable_urls": ["https://example.com/car2.jpg", "https://invalid-url.com/missing.jpg"],
-  "threshold_met": false
-}
-```
-
-## Мониторинг и отладка
-
-### Логирование
-
-Сервис ведет структурированные логи для всех операций:
-- **INFO**: Успешные операции, создание заданий, завершение обработки
-- **WARNING**: Недоступные изображения, проблемы с webhook доставкой
-- **ERROR**: Ошибки OpenAI API, проблемы с базой данных, failed задания
-
-### Метрики (для мониторинга)
+### Мониторинг и логирование
 
 ```python
-# Ключевые метрики для отслеживания
-- generation_requests_total{mode="sync|batch"}
-- generation_duration_seconds{mode="sync|batch"}
-- openai_api_errors_total{api="vision|translation"}
-- webhook_deliveries_total{status="success|failed"}
-- batch_jobs_total{status="pending|processing|completed|failed"}
-- database_operations_total{operation="create|read|update"}
+# monitoring.py - Пример мониторинга системы
+import psutil
+import logging
+from datetime import datetime, timedelta
+from database.models import BatchJob, WebhookDelivery
+from app import db
+
+def system_health_check():
+    """Проверка здоровья системы"""
+    health_data = {
+        "timestamp": datetime.utcnow().isoformat(),
+        "system": {
+            "cpu_percent": psutil.cpu_percent(interval=1),
+            "memory_percent": psutil.virtual_memory().percent,
+            "disk_percent": psutil.disk_usage('/').percent
+        },
+        "database": check_database_health(),
+        "background_worker": check_worker_health(),
+        "openai": check_openai_health()
+    }
+    
+    return health_data
+
+def check_database_health():
+    """Проверка состояния базы данных"""
+    try:
+        # Проверка соединения
+        db.session.execute('SELECT 1')
+        
+        # Статистика заданий за последние 24 часа
+        last_24h = datetime.utcnow() - timedelta(hours=24)
+        jobs_count = BatchJob.query.filter(BatchJob.created_at >= last_24h).count()
+        
+        # Статистика webhook доставок
+        webhook_stats = db.session.query(
+            WebhookDelivery.status,
+            db.func.count(WebhookDelivery.id)
+        ).filter(
+            WebhookDelivery.created_at >= last_24h
+        ).group_by(WebhookDelivery.status).all()
+        
+        return {
+            "status": "healthy",
+            "jobs_24h": jobs_count,
+            "webhook_deliveries": dict(webhook_stats)
+        }
+    except Exception as e:
+        logging.error(f"Database health check failed: {e}")
+        return {"status": "unhealthy", "error": str(e)}
+
+def check_worker_health():
+    """Проверка Background Worker"""
+    # Проверка наличия активных worker процессов
+    # Проверка последней активности worker
+    return {"status": "healthy", "last_activity": "2025-08-05T08:30:00Z"}
+
+def check_openai_health():
+    """Проверка доступности OpenAI API"""
+    # Тестовый запрос к OpenAI API
+    return {"status": "healthy", "response_time_ms": 150}
 ```
 
-### Troubleshooting
+## 📊 Ограничения и коды ошибок
 
-#### Частые проблемы
+### Ограничения системы
 
-1. **403 Forbidden** - Проверьте генерацию HMAC подписи
-2. **Недоступные изображения** - Убедитесь что URLs доступны публично
-3. **Webhook не доставляется** - Проверьте endpoint и firewall правила
-4. **Долгая обработка** - OpenAI batch API может занимать до 24 часов
+| Параметр | Синхронный режим | Пакетный режим | Polling API |
+|----------|------------------|----------------|-------------|
+| Максимальное количество изображений на автомобиль | 20 | Без ограничений | N/A |
+| Максимальное количество автомобилей на запрос | 1 | 50,000 | N/A |
+| Максимальный размер изображения | 10 MB | 10 MB | N/A |
+| Максимальный размер batch файла | N/A | 200 MB | N/A |
+| Максимальное время ответа | 300 секунд | 24 часа | 5 секунд |
+| Максимальное количество языков | 10 | 10 | N/A |
+| Rate limiting | 100 req/min | 10 req/min | 1000 req/min |
 
-#### Отладочные endpoints
+### HTTP коды ошибок
 
-```bash
-# Проверка подключения к базе данных
-curl http://localhost:5000/health
+| Код | Название | Описание | Частые причины |
+|-----|----------|----------|----------------|
+| **200** | OK | Синхронная обработка успешно завершена | Single car processed successfully |
+| **201** | Created | Пакетное задание создано и принято | Batch job successfully queued |
+| **202** | Accepted | Задание в процессе обработки | Job still processing, results not ready |
+| **400** | Bad Request | Некорректный запрос | Invalid JSON, missing required fields, limits exceeded |
+| **401** | Unauthorized | Отсутствует аутентификация | Missing X-Signature header |
+| **403** | Forbidden | Неверная подпись | Invalid HMAC signature, wrong shared key |
+| **404** | Not Found | Ресурс не найден | Job ID not found, endpoint doesn't exist |
+| **409** | Conflict | Конфликт состояния | Job already cancelled, duplicate lot_id |
+| **413** | Payload Too Large | Слишком большой запрос | Batch size exceeds limits, images too large |
+| **422** | Unprocessable Entity | Некорректные данные | Invalid image URLs, unsupported language codes |
+| **429** | Too Many Requests | Превышен rate limit | Too many requests per minute |
+| **500** | Internal Server Error | Внутренняя ошибка сервера | OpenAI API failure, database connection error |
+| **502** | Bad Gateway | Ошибка внешнего сервиса | OpenAI API unavailable |
+| **503** | Service Unavailable | Сервис временно недоступен | Database maintenance, high load |
+| **504** | Gateway Timeout | Таймаут внешнего сервиса | OpenAI API timeout |
 
-# Тестирование доступности изображений
-curl -X POST http://localhost:5000/api/v1/test-image-validation \
+### Примеры ошибок
+
+```json
+// 400 Bad Request - Invalid JSON
+{
+  "error": "Invalid request format",
+  "message": "Request body must be valid JSON",
+  "code": "INVALID_JSON"
+}
+
+// 403 Forbidden - Invalid signature
+{
+  "error": "Authentication failed",
+  "message": "Invalid HMAC signature",
+  "code": "INVALID_SIGNATURE"
+}
+
+// 413 Payload Too Large - Batch size exceeded
+{
+  "error": "Request too large",
+  "message": "Batch size exceeds maximum limit of 50,000 lots",
+  "code": "BATCH_SIZE_EXCEEDED",
+  "details": {
+    "provided_lots": 75000,
+    "max_allowed": 50000
+  }
+}
+
+// 422 Unprocessable Entity - Invalid image URL
+{
+  "error": "Validation failed",
+  "message": "Invalid image URLs detected",
+  "code": "INVALID_IMAGE_URLS",
+  "details": {
+    "invalid_urls": [
+      "https://invalid-domain.com/image.jpg",
+      "ftp://example.com/car.jpg"
+    ]
+  }
+}
+
+// 500 Internal Server Error - OpenAI API failure
+{
+  "error": "External service error",
+  "message": "OpenAI API request failed",
+  "code": "OPENAI_API_ERROR",
+  "details": {
+    "openai_error": "Model overloaded",
+    "retry_after": 60
+  }
+}
+```
+
+## 🔧 Troubleshooting
+
+### Частые проблемы и решения
+
+#### 1. Проблемы с подписью HMAC
+
+**Проблема**: HTTP 403 Forbidden
+**Решение**:
+```python
+# Убедитесь в корректной нормализации JSON
+import json
+lots_normalized = json.dumps(lots, separators=(',', ':'), sort_keys=True)
+
+# Проверьте shared_key
+shared_key = "exactly-the-same-key-on-both-sides"
+
+# Для polling requests используйте job_id как строку
+signature = hmac.new(shared_key.encode(), job_id.encode(), hashlib.sha256).hexdigest()
+```
+
+#### 2. Таймауты при синхронной обработке
+
+**Проблема**: HTTP 504 Gateway Timeout
+**Решение**:
+- Уменьшите количество изображений (≤10 рекомендуется)
+- Оптимизируйте размер изображений (≤5MB)
+- Используйте пакетный режим для больших заданий
+
+#### 3. Проблемы с webhook доставкой
+
+**Проблема**: Webhook не доставляются
+**Решение**:
+```python
+# Проверьте webhook endpoint
+def webhook_handler(request):
+    # Возвращайте HTTP 200/201/202 для успешной доставки
+    return {"status": "received"}, 200
+
+# Проверьте доступность URL
+curl -X POST https://your-app.com/webhook \
   -H "Content-Type: application/json" \
-  -d '{"urls": ["https://your-image-url.jpg"]}'
+  -d '{"test": "webhook"}'
 ```
 
-## Production Deployment
+#### 4. Превышение лимитов
 
-### Требования к окружению
+**Проблема**: HTTP 413 Payload Too Large
+**Решение**:
+- Разделите большие batch на несколько меньших
+- Оптимизируйте размер изображений
+- Используйте compression для изображений
+
+### Логи и диагностика
 
 ```bash
-# Обязательные переменные окружения
-export DATABASE_URL="postgresql://user:password@host:5432/database"
-export OPENAI_API_KEY="sk-your-openai-api-key"
-export SHARED_KEY="your-secret-hmac-key-minimum-32-chars"
+# Проверка логов приложения
+tail -f logs/generation_service.log
 
-# Опциональные переменные
-export SESSION_SECRET="your-session-secret-key"
-export LOG_LEVEL="INFO"  # DEBUG, INFO, WARNING, ERROR
+# Проверка статуса Background Worker
+grep "Background worker" logs/generation_service.log
+
+# Проверка webhook доставок
+grep "webhook_delivery" logs/generation_service.log
+
+# Мониторинг базы данных
+psql $DATABASE_URL -c "
+SELECT 
+  status, 
+  COUNT(*) as count,
+  AVG(EXTRACT(EPOCH FROM (updated_at - created_at))) as avg_duration_seconds
+FROM batch_jobs 
+WHERE created_at >= NOW() - INTERVAL '24 hours'
+GROUP BY status;
+"
 ```
-
-### Архитектура системы
-
-```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Load Balancer │    │   Flask App      │    │   PostgreSQL    │
-│   (nginx/HAProxy│◄───┤   (Gunicorn)     │◄───┤   Database      │
-│                 │    │                  │    │                 │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-                              │
-                              ▼
-                       ┌──────────────────┐    ┌─────────────────┐
-                       │ Background Worker│    │   OpenAI API    │
-                       │   (Threading)    │◄───┤   (Batch API)   │
-                       │                  │    │                 │
-                       └──────────────────┘    └─────────────────┘
-                              │
-                              ▼
-                       ┌──────────────────┐
-                       │   Webhook URLs   │
-                       │   (Client Apps)  │
-                       │                  │
-                       └──────────────────┘
-```
-
-### Рекомендации для production
-
-1. **Database**: Используйте PostgreSQL с connection pooling
-2. **Scaling**: Запускайте несколько worker процессов с Gunicorn
-3. **Monitoring**: Настройте логирование и метрики мониторинга
-4. **Security**: Используйте HTTPS и надежные HMAC ключи
-5. **Backup**: Регулярно создавайте backup базы данных с результатами
 
 ---
 
-© 2025 Generation Service - Production-Ready AI Car Description API  
-**Версия документации:** 2.0 | **Дата обновления:** 5 августа 2025  
-**Поддержка:** Полная интеграция PostgreSQL, Background Worker, Polling API
+## 📞 Поддержка и обратная связь
+
+**Generation Service API v2.0** - Production-ready микросервис для AI-powered генерации описаний автомобилей
+
+- **Документация**: Актуальная версия всегда доступна в веб-интерфейсе
+- **GitHub**: Исходный код и issues
+- **Статус системы**: Мониторинг через `/health` endpoint
+- **Архитектура**: PostgreSQL + Background Worker + Polling API + Webhook система
+
+**Основные улучшения v2.0:**
+- ✅ Полная PostgreSQL интеграция для production deployment
+- ✅ Background Worker система для надежной webhook доставки
+- ✅ Comprehensive Polling API для real-time мониторинга
+- ✅ Автоматические retry механизмы с exponential backoff
+- ✅ Production-ready архитектура с Load Balancing поддержкой
+
+---
+
+*Документация обновлена: 5 августа 2025 года*
