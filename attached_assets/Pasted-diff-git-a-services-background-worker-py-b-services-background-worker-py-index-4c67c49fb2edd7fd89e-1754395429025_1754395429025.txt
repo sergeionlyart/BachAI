@@ -1,0 +1,220 @@
+diff --git a/services/background_worker.py b/services/background_worker.py
+index 4c67c49fb2edd7fd89e806de1802f64391a5dff9..d94a6464850310beff67f785403d0f147fb2016a 100644
+--- a/services/background_worker.py
++++ b/services/background_worker.py
+@@ -88,59 +88,55 @@ class BackgroundWorker:
+         """
+         try:
+             # Get active jobs from database
+             active_jobs = db_manager.get_active_batch_jobs()
+             
+             for job in active_jobs:
+                 try:
+                     # Check job status with OpenAI
+                     updated_job = batch_monitor.check_job_status(str(job.id))
+                     
+                     if updated_job and updated_job.status == 'completed':
+                         # Job completed - create webhook delivery
+                         self._create_webhook_delivery(updated_job, db_manager)
+                         
+                 except Exception as e:
+                     logger.error(f"Error monitoring job {job.id}: {str(e)}")
+                     
+         except Exception as e:
+             logger.error(f"Error getting active batch jobs: {str(e)}")
+     
+     def _process_pending_webhooks(self, db_manager, webhook_sender):
+         """
+         Process pending webhook deliveries
+         """
+         try:
+-            # Get pending webhook deliveries
+-            pending_webhooks = db_manager.get_pending_webhook_deliveries()
+-            
++            # Get webhook deliveries that are ready for processing
++            pending_webhooks = db_manager.get_pending_webhook_deliveries(ready_only=True)
++
+             for webhook in pending_webhooks:
+                 try:
+-                    # Check if it's time to retry
+-                    if webhook.next_attempt_at is not None and datetime.utcnow() < webhook.next_attempt_at:
+-                        continue
+-                    
+                     # Check retry limit
+                     if webhook.attempt_count >= self.max_webhook_retries:
+                         db_manager.mark_webhook_failed(str(webhook.id), "Max retries exceeded")
+                         continue
+                     
+                     # Attempt delivery
+                     success = webhook_sender.deliver_webhook(webhook)
+                     
+                     if success:
+                         db_manager.mark_webhook_delivered(str(webhook.id))
+                         logger.info(f"Webhook delivered successfully to {webhook.webhook_url}")
+                     else:
+                         # Schedule retry
+                         retry_delay = min(300, 30 * (2 ** min(int(webhook.attempt_count), 10)))  # Exponential backoff, max 5 minutes
+                         next_attempt = datetime.utcnow() + timedelta(seconds=retry_delay)
+                         
+                         db_manager.update_webhook_attempt(
+                             str(webhook.id), 
+                             int(webhook.attempt_count) + 1,
+                             next_attempt,
+                             "Delivery failed, will retry"
+                         )
+                         
+                 except Exception as e:
+                     logger.error(f"Error processing webhook {webhook.id}: {str(e)}")
+diff --git a/services/database_manager.py b/services/database_manager.py
+index 55d4f91b4678a0f80abc17d5d89e470e71b41f5e..b2fed565a47d04848b8d6b9551c038483d69298b 100644
+--- a/services/database_manager.py
++++ b/services/database_manager.py
+@@ -179,66 +179,50 @@ class DatabaseManager:
+                 BatchResult.batch_job_id == job_id
+             ).first()
+             
+             return batch_result.result_data if batch_result else None
+             
+         except SQLAlchemyError as e:
+             logger.error(f"Database error getting batch results {job_id}: {str(e)}")
+             return None
+     
+     def get_batch_jobs_list(self, status_filter=None, limit=10, offset=0):
+         """
+         Get list of batch jobs with filtering
+         """
+         try:
+             query = self.session.query(BatchJob)
+             
+             if status_filter:
+                 query = query.filter(BatchJob.status == status_filter)
+             
+             jobs = query.order_by(BatchJob.created_at.desc()).offset(offset).limit(limit).all()
+             return jobs
+         except SQLAlchemyError as e:
+             logger.error(f"Database error getting batch jobs list: {str(e)}")
+             return []
+     
+-    def get_pending_webhook_deliveries(self):
+-        """
+-        Get webhook deliveries that need to be attempted
+-        """
+-        try:
+-            from sqlalchemy import and_
+-            return self.session.query(WebhookDelivery).filter(
+-                and_(
+-                    WebhookDelivery.status.in_(['pending', 'failed']),
+-                    WebhookDelivery.attempt_count < 5
+-                )
+-            ).all()
+-        except SQLAlchemyError as e:
+-            logger.error(f"Database error getting pending webhooks: {str(e)}")
+-            return []
+-    
+     def mark_webhook_delivered(self, webhook_id: str) -> bool:
+         """
+         Mark webhook as successfully delivered
+         """
+         try:
+             webhook = self.session.query(WebhookDelivery).filter(
+                 WebhookDelivery.id == webhook_id
+             ).first()
+             
+             if webhook:
+                 webhook.status = 'delivered'
+                 webhook.delivered_at = datetime.utcnow()
+                 self.session.commit()
+                 return True
+             return False
+         except SQLAlchemyError as e:
+             self.session.rollback()
+             logger.error(f"Database error marking webhook delivered: {str(e)}")
+             return False
+     
+     def mark_webhook_failed(self, webhook_id: str, error_message: str) -> bool:
+         """
+         Mark webhook as permanently failed
+         """
+         try:
+@@ -282,65 +266,76 @@ class DatabaseManager:
+     
+     def create_webhook_delivery(self, job_id: str, webhook_url: str, payload: Dict[str, Any], signature: str) -> str:
+         """
+         Create webhook delivery record
+         """
+         try:
+             webhook_delivery = WebhookDelivery(
+                 batch_job_id=job_id,
+                 webhook_url=webhook_url,
+                 payload=payload,
+                 signature=signature,
+                 next_attempt_at=datetime.utcnow()
+             )
+             
+             self.session.add(webhook_delivery)
+             self.session.commit()
+             
+             logger.info(f"Created webhook delivery {webhook_delivery.id} for job {job_id}")
+             return str(webhook_delivery.id)
+             
+         except SQLAlchemyError as e:
+             self.session.rollback()
+             logger.error(f"Database error creating webhook delivery: {str(e)}")
+             raise e
+     
+-    def get_pending_webhook_deliveries(self) -> List[WebhookDelivery]:
++    def get_pending_webhook_deliveries(self, ready_only: bool = False) -> List[WebhookDelivery]:
+         """
+-        Get webhook deliveries that need to be attempted
++        Get webhook deliveries that need to be attempted.
++
++        Args:
++            ready_only: If True, only return deliveries that are ready to be
++                retried (next_attempt_at is in the past or not set). When False,
++                return all pending or failed deliveries regardless of schedule.
+         """
+         try:
+-            return self.session.query(WebhookDelivery).filter(
++            query = self.session.query(WebhookDelivery).filter(
+                 and_(
+                     WebhookDelivery.status.in_(['pending', 'failed']),
+-                    WebhookDelivery.attempt_count < 5,
++                    WebhookDelivery.attempt_count < 5
++                )
++            )
++
++            if ready_only:
++                query = query.filter(
+                     or_(
+                         WebhookDelivery.next_attempt_at.is_(None),
+                         WebhookDelivery.next_attempt_at <= datetime.utcnow()
+                     )
+                 )
+-            ).all()
++
++            return query.all()
+         except SQLAlchemyError as e:
+             logger.error(f"Database error getting pending webhooks: {str(e)}")
+             return []
+     
+     def update_webhook_delivery(self, delivery_id: str, status: str, response_status: int = None, 
+                                response_body: str = None, error_message: str = None) -> bool:
+         """
+         Update webhook delivery status
+         """
+         try:
+             delivery = self.session.query(WebhookDelivery).filter(
+                 WebhookDelivery.id == delivery_id
+             ).first()
+             
+             if not delivery:
+                 return False
+             
+             delivery.status = status
+             delivery.attempt_count += 1
+             delivery.last_attempt_at = datetime.utcnow()
+             
+             if status == 'delivered':
+                 delivery.delivered_at = datetime.utcnow()
+             elif status == 'failed' and delivery.attempt_count < 5:
+                 # Schedule next retry with exponential backoff
