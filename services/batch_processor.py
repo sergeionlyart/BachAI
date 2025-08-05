@@ -60,45 +60,72 @@ class BatchProcessor:
             
             # Create batch requests for vision processing
             vision_requests = []
+            translation_requests = []
             
             for lot in processed_lots:
                 if lot['status'] == 'error':
                     continue
                 
-                # Vision request using chat completions format
+                # Vision request
                 vision_custom_id = f"vision:{lot['lot_id']}"
                 
-                # Build content array for vision analysis
                 content = [
                     {
-                        "type": "text",
+                        "type": "input_text",
                         "text": f"Analyze these car images and provide a detailed damage assessment. Additional info: {lot['additional_info']}"
                     }
                 ]
                 
                 for image_url in lot['valid_images']:
                     content.append({
-                        "type": "image_url",
-                        "image_url": {"url": image_url, "detail": "low"}
+                        "type": "input_image",
+                        "image_url": image_url,
+                        "detail": "low"
                     })
                 
                 vision_request = {
                     "custom_id": vision_custom_id,
                     "method": "POST",
-                    "url": "/v1/chat/completions",
+                    "url": "/v1/responses",
                     "body": {
-                        "model": "gpt-4o",
-                        "messages": [
+                        "model": "o4-mini",
+                        "reasoning": {"effort": "medium"},
+                        "input": [
                             {
                                 "role": "user",
                                 "content": content
                             }
                         ],
-                        "max_tokens": 1024,
-                        "temperature": 0.3
+                        "max_output_tokens": 1024
                     }
                 }
                 vision_requests.append(vision_request)
+                
+                # Translation requests for non-English languages
+                for lang in languages:
+                    if lang.lower() != 'en':
+                        translation_custom_id = f"tr:{lot['lot_id']}:{lang}"
+                        translation_request = {
+                            "custom_id": translation_custom_id,
+                            "method": "POST",
+                            "url": "/v1/responses",
+                            "body": {
+                                "model": "gpt-4.1-mini",
+                                "reasoning": {"effort": "low"},
+                                "input": [
+                                    {
+                                        "role": "system",
+                                        "content": f"Translate the following text into {lang} only. Maintain formatting."
+                                    },
+                                    {
+                                        "role": "user",
+                                        "content": "{{VISION_RESULT}}"  # Placeholder, will be replaced
+                                    }
+                                ],
+                                "max_output_tokens": 2048
+                            }
+                        }
+                        translation_requests.append(translation_request)
             
             # Submit vision batch job
             vision_batch_id = None
@@ -209,12 +236,10 @@ class BatchProcessor:
                         
                         if result.get('response'):
                             response_body = result['response']['body']
-                            # Extract content from chat completions response
-                            if 'choices' in response_body and response_body['choices']:
-                                message_content = response_body['choices'][0]['message']['content']
-                                vision_results[lot_id] = message_content
+                            if response_body.get('output_text'):
+                                vision_results[lot_id] = response_body['output_text']
                             else:
-                                logger.warning(f"No content for lot {lot_id}")
+                                logger.warning(f"No output_text for lot {lot_id}")
                                 vision_results[lot_id] = "No description available"
                         else:
                             logger.error(f"No response for lot {lot_id}: {result.get('error', 'Unknown error')}")
@@ -253,10 +278,11 @@ class BatchProcessor:
                     translation_request = {
                         "custom_id": translation_custom_id,
                         "method": "POST",
-                        "url": "/v1/chat/completions",
+                        "url": "/v1/responses",
                         "body": {
-                            "model": "gpt-4o-mini",
-                            "messages": [
+                            "model": "gpt-4.1-mini",
+                            "reasoning": {"effort": "low"},
+                            "input": [
                                 {
                                     "role": "system",
                                     "content": f"Translate the following text into {lang} only. Maintain formatting."
@@ -266,8 +292,7 @@ class BatchProcessor:
                                     "content": english_text
                                 }
                             ],
-                            "max_tokens": 2048,
-                            "temperature": 0.3
+                            "max_output_tokens": 2048
                         }
                     }
                     translation_requests.append(translation_request)

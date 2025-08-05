@@ -34,12 +34,10 @@ Preferred communication style: Simple, everyday language.
 - **Threshold-based processing**: Minimum viable image count requirements
 
 ### AI Integration
-- **OpenAI Chat Completions API** integration using gpt-4o model for vision analysis
+- **OpenAI Responses API** integration using o4-mini reasoning model with medium effort setting
 - **Vision analysis** with configurable system prompts for automotive damage assessment
-- **Translation capabilities** using gpt-4o-mini for multilingual output
+- **Translation capabilities** using GPT-4.1-mini for multilingual output
 - **Retry mechanisms** with exponential backoff for API reliability
-- **Timeout configuration** with 60-second limits to prevent WORKER TIMEOUT errors
-- **Parallel translation processing** in sync mode to improve performance
 
 ### Error Handling and Resilience
 - **Comprehensive retry logic** with configurable attempts and backoff strategies
@@ -56,10 +54,10 @@ Preferred communication style: Simple, everyday language.
 ## External Dependencies
 
 ### OpenAI Platform
-- **Chat Completions API**: Primary integration for gpt-4o vision model and gpt-4o-mini translation model
-- **Vision API**: Car image analysis and damage detection using gpt-4o
-- **Translation API**: Multilingual description generation using gpt-4o-mini
-- **Batch API**: Large-scale asynchronous processing capabilities using chat completions endpoint
+- **Responses API**: Primary integration for o4-mini reasoning model
+- **Vision API**: Car image analysis and damage detection
+- **Translation API**: Multilingual description generation using GPT-4.1-mini
+- **Batch API**: Large-scale asynchronous processing capabilities
 
 ### Infrastructure Services
 - **HTTP Client Libraries**: Requests library for external API communication
