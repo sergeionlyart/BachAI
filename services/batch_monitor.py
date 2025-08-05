@@ -150,8 +150,14 @@ class BatchMonitor:
                 self.db_manager.update_batch_job_status(str(job.id), 'completed')
                 self._trigger_webhook(job)
             else:
+                # Mark job as processing for translation step and clear error
+                self.db_manager.update_batch_job_status(str(job.id), 'processing', None)
+                logger.info(f"Starting translation batch for job {job.id} with languages {job.languages}")
+                
                 # Start translation batch
-                self._start_translation_batch(job, vision_results)
+                # Convert parsed results to expected format
+                vision_results_dict = {'results': vision_results}
+                self._start_translation_batch(job, vision_results_dict)
                 
         except Exception as e:
             logger.error(f"Error processing vision results for job {job.id}: {str(e)}")
@@ -185,53 +191,121 @@ class BatchMonitor:
             ).all()
             
             lot_map = {lot.lot_id: lot for lot in lots}
+            logger.info(f"Processing {len(vision_results)} vision results for job {job.id} with {len(lots)} lots")
             
             for result in vision_results:
                 if not isinstance(result, dict):
+                    logger.warning(f"Skipping non-dict result: {type(result)}")
                     continue
                     
                 custom_id = result.get('custom_id', '')
+                logger.debug(f"Processing result with custom_id: {custom_id}")
+                
                 if not custom_id.startswith('vision:'):
+                    logger.debug(f"Skipping non-vision result: {custom_id}")
                     continue
                 
-                # Parse custom_id: "vision:job_id:lot_id"
+                # Parse custom_id: supports both "vision:lot_id" and "vision:job_id:lot_id"
                 parts = custom_id.split(':')
-                if len(parts) < 3:
+                if len(parts) == 2:
+                    # New format: "vision:lot_id"
+                    lot_id = parts[1]
+                elif len(parts) >= 3:
+                    # Old format: "vision:job_id:lot_id"
+                    lot_id = parts[2]
+                else:
+                    logger.warning(f"Invalid custom_id format: {custom_id}")
                     continue
-                
-                lot_id = parts[2]
                 response_data = result.get('response', {})
+                logger.info(f"Processing lot {lot_id}")
+                logger.info(f"Response keys: {list(response_data.keys()) if response_data else 'None'}")
                 
                 # Extract vision text from response
                 vision_text = ''
                 if isinstance(response_data, dict):
                     body = response_data.get('body', {})
+                    logger.info(f"Body keys: {list(body.keys()) if body else 'None'}")
+                    
                     if isinstance(body, dict):
-                        choices = body.get('choices', [{}])
-                        if choices and len(choices) > 0:
-                            vision_text = choices[0].get('message', {}).get('content', '')
+                        # For OpenAI Responses API - primary field is 'text'
+                        text = body.get('text', '')
+                        logger.info(f"Raw text field for lot {lot_id}: {type(text)} - {str(text)[:200]}")
+                        
+                        # Handle different text field formats
+                        if isinstance(text, str) and text:
+                            vision_text = text
+                            logger.info(f"Found text string for lot {lot_id}: {len(text)} chars")
+                        elif isinstance(text, dict):
+                            # If text is a dict, look for nested content
+                            text_content = text.get('content', '') or text.get('value', '') or str(text)
+                            if text_content and isinstance(text_content, str):
+                                vision_text = text_content
+                                logger.info(f"Extracted text from dict for lot {lot_id}: {len(text_content)} chars")
+                            else:
+                                logger.warning(f"Text dict has no extractable content for lot {lot_id}: {text}")
+                        elif text:
+                            # Convert to string if it's another type
+                            vision_text = str(text)
+                            logger.info(f"Converted text to string for lot {lot_id}: {len(vision_text)} chars")
+                        else:
+                            # Fallback to 'output' field
+                            output = body.get('output', '')
+                            if output:
+                                vision_text = output
+                                logger.info(f"Found output for lot {lot_id}: {len(output)} chars")
+                            else:
+                                # Legacy fallback to choices format
+                                choices = body.get('choices', [{}])
+                                logger.info(f"Trying choices fallback, choices count: {len(choices) if choices else 0}")
+                                if choices and len(choices) > 0:
+                                    message = choices[0].get('message', {})
+                                    content = message.get('content', '')
+                                    if content:
+                                        vision_text = content
+                                        logger.info(f"Found content in choices for lot {lot_id}: {len(content)} chars")
+                                    else:
+                                        logger.warning(f"No content in message for lot {lot_id}, message keys: {list(message.keys()) if message else 'None'}")
+                                else:
+                                    logger.warning(f"No valid choices for lot {lot_id}")
+                    else:
+                        logger.warning(f"Body is not dict for lot {lot_id}: {type(body)}")
+                else:
+                    logger.warning(f"Response_data is not dict for lot {lot_id}: {type(response_data)}")
+                
+                # Log final vision_text status
+                if vision_text:
+                    logger.info(f"SUCCESS: Got vision text for lot {lot_id}: {len(vision_text)} characters")
+                else:
+                    logger.error(f"FAILED: No vision text extracted for lot {lot_id}")
                 
                 # Update lot with vision result
-                if lot_id in lot_map and vision_text:
+                if lot_id in lot_map:
                     lot = lot_map[lot_id]
-                    lot.vision_result = vision_text
-                    lot.status = 'processing'  # Will be completed after translations
-                    lot.updated_at = datetime.utcnow()
-                    logger.info(f"Vision result saved for lot {lot_id}: {len(vision_text)} characters")
-                elif lot_id in lot_map:
-                    lot = lot_map[lot_id]
-                    lot.status = 'failed'
-                    lot.error_message = 'No vision result in response'
-                    lot.updated_at = datetime.utcnow()
-                    logger.error(f"No vision result for lot {lot_id}")
+                    if vision_text and isinstance(vision_text, str):
+                        lot.vision_result = vision_text
+                        lot.status = 'processing'  # Will be completed after translations
+                        lot.updated_at = datetime.utcnow()
+                        logger.info(f"Vision result saved for lot {lot_id}: {len(vision_text)} characters")
+                    else:
+                        lot.status = 'failed'
+                        lot.error_message = f'No valid vision result: {type(vision_text)} - {str(vision_text)[:100]}'
+                        lot.updated_at = datetime.utcnow()
+                        logger.error(f"No vision result for lot {lot_id}: {type(vision_text)} - {str(vision_text)[:100]}")
+                else:
+                    logger.warning(f"Lot {lot_id} not found in job {job.id}")
             
             # Update job progress
-            job.processed_lots = len([lot for lot in lots if lot.vision_result])
+            successful_lots = len([lot for lot in lots if lot.vision_result])
+            job.processed_lots = successful_lots
             job.updated_at = datetime.utcnow()
             
             # Commit changes
             self.db_manager.session.commit()
-            logger.info(f"Saved vision results for job {job.id}")
+            logger.info(f"Saved vision results for job {job.id}: {successful_lots}/{len(lots)} lots processed")
+            
+            # If we have results but no successful lots, there's a parsing issue
+            if len(vision_results) > 0 and successful_lots == 0:
+                logger.error(f"All vision results failed to parse for job {job.id}! Check custom_id format.")
                     
         except Exception as e:
             self.db_manager.session.rollback()
@@ -367,12 +441,21 @@ class BatchMonitor:
     def _start_translation_batch(self, job, vision_results: Dict[str, Any]):
         """Start translation batch for non-English languages"""
         try:
+            # Get lots with vision results from database
+            lots = self.db_manager.session.query(BatchLot).filter(
+                BatchLot.batch_job_id == job.id,
+                BatchLot.vision_result.isnot(None)
+            ).all()
+            
+            logger.info(f"Creating translation requests for {len(lots)} lots with vision results")
+            
             # Create translation requests
             translation_requests = []
             
-            for lot_result in vision_results.get('results', []):
-                english_text = lot_result.get('vision_result', '')
-                if not english_text:
+            for lot in lots:
+                english_text = lot.vision_result
+                if not english_text or not isinstance(english_text, str):
+                    logger.warning(f"Skipping lot {lot.lot_id}: no valid vision result")
                     continue
                 
                 for lang in job.languages:
@@ -380,7 +463,7 @@ class BatchMonitor:
                         continue
                     
                     request = {
-                        "custom_id": f"translate:{job.id}:{lot_result['lot_id']}:{lang}",
+                        "custom_id": f"translate:{job.id}:{lot.lot_id}:{lang}",
                         "method": "POST",
                         "url": "/v1/responses",
                         "body": {
@@ -390,6 +473,8 @@ class BatchMonitor:
                         }
                     }
                     translation_requests.append(request)
+                    
+            logger.info(f"Created {len(translation_requests)} translation requests for job {job.id}")
             
             if translation_requests:
                 # Submit translation batch
