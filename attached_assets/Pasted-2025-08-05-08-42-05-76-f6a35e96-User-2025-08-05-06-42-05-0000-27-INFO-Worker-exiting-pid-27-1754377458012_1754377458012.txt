@@ -1,0 +1,108 @@
+2025-08-05 08:42:05.76
+f6a35e96
+User
+[2025-08-05 06:42:05 +0000] [27] [INFO] Worker exiting (pid: 27)
+2025-08-05 08:42:05.96
+f6a35e96
+User
+[2025-08-05 06:42:05 +0000] [28] [INFO] Booting worker with pid: 28
+2025-08-05 08:42:42.32
+4392b234
+System
+system: received signal terminated
+2025-08-05 08:42:42.32
+4392b234
+User
+[2025-08-05 06:42:42 +0000] [20] [INFO] Handling signal: term
+2025-08-05 08:42:42.33
+4392b234
+User
+[2025-08-05 06:42:42 +0000] [26] [INFO] Worker exiting (pid: 26)
+2025-08-05 08:42:42.63
+4392b234
+User
+[2025-08-05 06:42:42 +0000] [20] [INFO] Shutting down: Master
+2025-08-05 08:42:42.66
+4392b234
+System
+command finished successfully with exit code 0
+2025-08-05 08:42:42.66
+4392b234
+System
+main done, exiting
+2025-08-05 08:44:16.97
+f6a35e96
+User
+2025-08-05 06:44:16,971 - root - INFO - Logging configured successfully
+2025-08-05 08:47:32.85
+31010026
+System
+forwarding local port 5000 to external port 80 (mapped as 1104)
+2025-08-05 08:47:34.51
+31010026
+User
+[2025-08-05 06:47:34 +0000] [18] [INFO] Starting gunicorn 23.0.0
+2025-08-05 08:47:34.52
+31010026
+User
+[2025-08-05 06:47:34 +0000] [18] [INFO] Using worker: sync
+2025-08-05 08:47:34.52
+31010026
+User
+[2025-08-05 06:47:34 +0000] [25] [INFO] Booting worker with pid: 25
+2025-08-05 08:47:45.19
+31010026
+User
+2025-08-05 06:47:45,194 - root - INFO - Logging configured successfully
+2025-08-05 08:48:29.70
+31010026
+User
+2025-08-05 06:48:29,702 - routes.api - INFO - Starting batch creation for 10 lots
+2025-08-05 08:48:29.70
+31010026
+User
+2025-08-05 06:48:29,702 - services.batch_processor - INFO - Creating batch job 3e041a07-9ea4-400a-a8c2-5e9489c16246 for 10 lots
+2025-08-05 08:48:34.20
+31010026
+User
+2025-08-05 06:48:34,200 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/files "HTTP/1.1 200 OK"
+2025-08-05 08:48:34.41
+31010026
+User
+2025-08-05 06:48:34,418 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/batches "HTTP/1.1 200 OK"
+2025-08-05 08:48:34.43
+31010026
+User
+2025-08-05 06:48:34,434 - services.openai_client - INFO - Created batch job batch_6891a94241448190bce64fa8131c62c9 with file file-GRRmNu59H89mHUkAf8Gxsp
+2025-08-05 08:48:34.43
+31010026
+User
+2025-08-05 06:48:34,434 - services.batch_processor - INFO - Created batch job 3e041a07-9ea4-400a-a8c2-5e9489c16246 in 4.73s with vision batch batch_6891a94241448190bce64fa8131c62c9
+2025-08-05 08:48:34.43
+31010026
+User
+2025-08-05 06:48:34,434 - routes.api - INFO - Batch job 3e041a07-9ea4-400a-a8c2-5e9489c16246 created in 4.73s
+2025-08-05 08:48:55.17
+f6a35e96
+System
+system: received signal terminated
+2025-08-05 08:48:55.17
+f6a35e96
+User
+[2025-08-05 06:48:55 +0000] [18] [INFO] Handling signal: term
+2025-08-05 08:48:55.17
+f6a35e96
+User
+[2025-08-05 06:48:55 +0000] [28] [INFO] Worker exiting (pid: 28)
+2025-08-05 08:48:55.48
+f6a35e96
+User
+[2025-08-05 06:48:55 +0000] [18] [INFO] Shutting down: Master
+2025-08-05 08:48:55.51
+f6a35e96
+System
+command finished successfully with exit code 0
+2025-08-05 08:48:55.51
+f6a35e96
+System
+main done, exiting
