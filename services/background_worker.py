@@ -60,17 +60,20 @@ class BackgroundWorker:
         while self.running:
             try:
                 # Use Flask application context for database operations
-                with self.flask_app.app_context():
-                    # Initialize services within app context
-                    db_manager = DatabaseManager(db.session)
-                    batch_monitor = BatchMonitor()
-                    webhook_sender = WebhookSender(SHARED_KEY)
-                    
-                    # Monitor active batch jobs
-                    self._monitor_batch_jobs(db_manager, batch_monitor)
-                    
-                    # Process pending webhooks
-                    self._process_pending_webhooks(db_manager, webhook_sender)
+                if self.flask_app:
+                    with self.flask_app.app_context():
+                        # Initialize services within app context
+                        db_manager = DatabaseManager(db.session)
+                        batch_monitor = BatchMonitor()
+                        webhook_sender = WebhookSender(SHARED_KEY)
+                        
+                        # Monitor active batch jobs
+                        self._monitor_batch_jobs(db_manager, batch_monitor)
+                        
+                        # Process pending webhooks
+                        self._process_pending_webhooks(db_manager, webhook_sender)
+                else:
+                    logger.error("Flask app not initialized, skipping background worker iteration")
                 
                 # Sleep before next iteration
                 time.sleep(self.check_interval)

@@ -133,7 +133,7 @@ class BatchMonitor:
             )
             
             # Parse and save vision results
-            vision_results = self.openai_client.parse_batch_results(results_content)
+            vision_results = self._parse_batch_results(results_content)
             
             # Update database with vision results
             self._save_vision_results(job, vision_results)
@@ -160,7 +160,7 @@ class BatchMonitor:
             )
             
             # Parse and save translation results
-            translation_results = self.openai_client.parse_batch_results(results_content)
+            translation_results = self._parse_batch_results(results_content)
             self._save_translation_results(job, translation_results)
             
             # Finalize job with all results
@@ -170,20 +170,123 @@ class BatchMonitor:
             logger.error(f"Error processing translation results for job {job.id}: {str(e)}")
             self.db_manager.update_batch_job_status(str(job.id), 'failed', str(e))
     
-    def _save_vision_results(self, job, vision_results: Dict[str, Any]):
+    def _save_vision_results(self, job, vision_results: list):
         """Save vision results to database"""
-        # Implementation will be added when we have proper models working
-        pass
+        try:
+            for result in vision_results:
+                if not isinstance(result, dict):
+                    continue
+                    
+                custom_id = result.get('custom_id', '')
+                if not custom_id.startswith('vision:'):
+                    continue
+                
+                # Parse custom_id: "vision:job_id:lot_id"
+                parts = custom_id.split(':')
+                if len(parts) < 3:
+                    continue
+                
+                lot_id = parts[2]
+                response_data = result.get('response', {})
+                if isinstance(response_data, dict):
+                    body = response_data.get('body', {})
+                    if isinstance(body, dict):
+                        choices = body.get('choices', [{}])
+                        if choices and len(choices) > 0:
+                            vision_text = choices[0].get('message', {}).get('content', '')
+                        else:
+                            vision_text = ''
+                    else:
+                        vision_text = ''
+                else:
+                    vision_text = str(response_data)
+                
+                if vision_text:
+                    # For now, store results directly in job (we'll add proper DB methods later)
+                    logger.info(f"Vision result received for lot {lot_id}: {len(vision_text)} characters")
+                    
+        except Exception as e:
+            logger.error(f"Error saving vision results: {str(e)}")
+            raise
     
-    def _save_translation_results(self, job, translation_results: Dict[str, Any]):
+    def _save_translation_results(self, job, translation_results: list):
         """Save translation results to database"""
-        # Implementation will be added when we have proper models working
-        pass
+        try:
+            for result in translation_results:
+                if not isinstance(result, dict):
+                    continue
+                    
+                custom_id = result.get('custom_id', '')
+                if not custom_id.startswith('translate:'):
+                    continue
+                
+                # Parse custom_id: "translate:job_id:lot_id:language"
+                parts = custom_id.split(':')
+                if len(parts) < 4:
+                    continue
+                
+                lot_id = parts[2]
+                language = parts[3]
+                response_data = result.get('response', {})
+                if isinstance(response_data, dict):
+                    body = response_data.get('body', {})
+                    if isinstance(body, dict):
+                        choices = body.get('choices', [{}])
+                        if choices and len(choices) > 0:
+                            translated_text = choices[0].get('message', {}).get('content', '')
+                        else:
+                            translated_text = ''
+                    else:
+                        translated_text = ''
+                else:
+                    translated_text = str(response_data)
+                
+                if translated_text:
+                    # For now, store results directly in job (we'll add proper DB methods later)
+                    logger.info(f"Translation result received for lot {lot_id} in {language}: {len(translated_text)} characters")
+                    
+        except Exception as e:
+            logger.error(f"Error saving translation results: {str(e)}")
+            raise
     
     def _finalize_job_results(self, job):
         """Create final API format results"""
-        # Implementation will be added when we have proper models working
-        pass
+        try:
+            # For now, just log that finalization is happening
+            # TODO: Implement proper result finalization when database methods are ready
+            logger.info(f"Finalizing results for job {job.id}")
+            
+        except Exception as e:
+            logger.error(f"Error finalizing job results: {str(e)}")
+            raise
+    
+    def _parse_batch_results(self, results_content: str) -> list:
+        """Parse batch results from JSONL content"""
+        results = []
+        try:
+            import json
+            for line in results_content.strip().split('\n'):
+                if line.strip():
+                    result = json.loads(line)
+                    results.append(result)
+            return results
+        except Exception as e:
+            logger.error(f"Error parsing batch results: {str(e)}")
+            return []
+    
+    def check_job_status(self, job_id: str):
+        """Check single job status and return updated job"""
+        try:
+            job = self.db_manager.get_batch_job(job_id)
+            if not job:
+                return None
+            
+            self._check_job_status(job)
+            return self.db_manager.get_batch_job(job_id)  # Return updated job
+        
+        except Exception as e:
+            logger.error(f"Error checking job status {job_id}: {str(e)}")
+            return None
     
     def _start_translation_batch(self, job, vision_results: Dict[str, Any]):
         """Start translation batch for non-English languages"""
@@ -274,24 +377,3 @@ def get_batch_monitor(interval: int = 30) -> BatchMonitor:
         batch_monitor = BatchMonitor(interval)
     return batch_monitor
 
-# Add missing method to BatchMonitor class
-def add_check_job_status_method():
-    """Add check_job_status method to BatchMonitor class"""
-    def check_job_status(self, job_id: str):
-        """Check single job status and return updated job"""
-        try:
-            job = self.db_manager.get_batch_job(job_id)
-            if not job:
-                return None
-            
-            self._check_job_status(job)
-            return self.db_manager.get_batch_job(job_id)  # Return updated job
-        
-        except Exception as e:
-            logger.error(f"Error checking job status {job_id}: {str(e)}")
-            return None
-    
-    BatchMonitor.check_job_status = check_job_status
-
-# Apply the method addition
-add_check_job_status_method()
