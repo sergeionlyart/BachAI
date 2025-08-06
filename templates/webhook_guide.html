@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Руководство по веб-хукам - Generation Service</title>
+    <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/themes/prism-tomorrow.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/components/prism-core.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/plugins/autoloader/prism-autoloader.min.js"></script>
+</head>
+<body>
+    <nav class="navbar navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <strong>Generation Service</strong>
+            </a>
+            <ul class="navbar-nav ms-auto">
+                <li class="nav-item">
+                    <a class="nav-link" href="/">Главная</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/docs">API Документация</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link active" href="/webhook-guide">Веб-хуки</a>
+                </li>
+            </ul>
+        </div>
+    </nav>
+
+    <div class="container my-5">
+        <div class="row">
+            <div class="col-lg-3">
+                <div class="sticky-top" style="top: 1rem;">
+                    <div class="card">
+                        <div class="card-header">
+                            <h6 class="mb-0">Содержание</h6>
+                        </div>
+                        <div class="card-body">
+                            <nav class="nav flex-column">
+                                <a class="nav-link" href="#overview">Обзор</a>
+                                <a class="nav-link" href="#setup">Настройка</a>
+                                <a class="nav-link" href="#payload">Формат уведомлений</a>
+                                <a class="nav-link" href="#signature">Проверка подписи</a>
+                                <a class="nav-link" href="#results">Получение результатов</a>
+                                <a class="nav-link" href="#errors">Обработка ошибок</a>
+                                <a class="nav-link" href="#testing">Тестирование</a>
+                                <a class="nav-link" href="#monitoring">Мониторинг</a>
+                                <a class="nav-link" href="#best-practices">Лучшие практики</a>
+                            </nav>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-lg-9">
+                <h1 class="mb-4">Руководство по использованию веб-хуков</h1>
+                
+                <section id="overview" class="mb-5">
+                    <h2>Обзор</h2>
+                    <p class="lead">Веб-хуки позволяют получать автоматические уведомления о завершении обработки заданий без необходимости постоянно опрашивать API.</p>
+                    
+                    <div class="alert alert-info">
+                        <strong>Преимущества веб-хуков:</strong>
+                        <ul class="mb-0">
+                            <li>Мгновенные уведомления о завершении</li>
+                            <li>Снижение нагрузки на API</li>
+                            <li>Более эффективная архитектура</li>
+                            <li>Автоматическая обработка результатов</li>
+                        </ul>
+                    </div>
+                </section>
+
+                <section id="setup" class="mb-5">
+                    <h2>Настройка веб-хука</h2>
+                    
+                    <h4>Создание задания с веб-хуком</h4>
+                    <p>При отправке задания добавьте параметр <code>webhook_url</code>:</p>
+                    
+                    <pre><code class="language-bash">curl -X POST https://your-service.com/api/v1/generate-descriptions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "signature": "your_hmac_signature",
+    "version": "1.0.0", 
+    "languages": ["en", "ru"],
+    "webhook_url": "https://your-domain.com/webhook-handler",
+    "lots": [
+      {
+        "lot_id": "car_001",
+        "images": [
+          "https://example.com/car1_front.jpg",
+          "https://example.com/car1_back.jpg"
+        ]
+      }
+    ]
+  }'</code></pre>
+
+                    <h4>Требования к endpoint'у</h4>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="card bg-success bg-opacity-10 border-success">
+                                <div class="card-body">
+                                    <h6 class="text-success">✅ Обязательно</h6>
+                                    <ul class="mb-0">
+                                        <li>Принимать HTTP POST</li>
+                                        <li>Возвращать 200-299</li>
+                                        <li>Отвечать за 30 секунд</li>
+                                        <li>Проверять подпись</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card bg-warning bg-opacity-10 border-warning">
+                                <div class="card-body">
+                                    <h6 class="text-warning">⚠️ Рекомендуется</h6>
+                                    <ul class="mb-0">
+                                        <li>Использовать HTTPS</li>
+                                        <li>Логировать запросы</li>
+                                        <li>Асинхронная обработка</li>
+                                        <li>Идемпотентность</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="payload" class="mb-5">
+                    <h2>Формат уведомлений</h2>
+                    
+                    <h4>Структура payload</h4>
+                    <pre><code class="language-json">{
+  "job_id": "365a09ce-5416-49b5-8471-d6aad042761c",
+  "status": "completed",
+  "timestamp": "2025-08-06T11:30:00Z",
+  "total_lots": 10,
+  "completed_lots": 10,
+  "failed_lots": 0,
+  "webhook_url": "https://your-domain.com/webhook-handler",
+  "results_available": true
+}</code></pre>
+
+                    <h4>Описание полей</h4>
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Поле</th>
+                                    <th>Тип</th>
+                                    <th>Описание</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td><code>job_id</code></td>
+                                    <td>string</td>
+                                    <td>Уникальный ID задания</td>
+                                </tr>
+                                <tr>
+                                    <td><code>status</code></td>
+                                    <td>string</td>
+                                    <td>completed, failed, partially_completed</td>
+                                </tr>
+                                <tr>
+                                    <td><code>timestamp</code></td>
+                                    <td>string</td>
+                                    <td>Время завершения в ISO 8601</td>
+                                </tr>
+                                <tr>
+                                    <td><code>total_lots</code></td>
+                                    <td>number</td>
+                                    <td>Общее количество лотов</td>
+                                </tr>
+                                <tr>
+                                    <td><code>completed_lots</code></td>
+                                    <td>number</td>
+                                    <td>Успешно обработанных лотов</td>
+                                </tr>
+                                <tr>
+                                    <td><code>failed_lots</code></td>
+                                    <td>number</td>
+                                    <td>Лотов с ошибками</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section id="signature" class="mb-5">
+                    <h2>Проверка подписи</h2>
+                    
+                    <div class="alert alert-danger">
+                        <strong>Важно для безопасности!</strong><br>
+                        Всегда проверяйте подпись <code>X-Signature</code> для защиты от поддельных запросов.
+                    </div>
+
+                    <h4>Python пример</h4>
+                    <pre><code class="language-python">import hmac
+import hashlib
+from flask import Flask, request, jsonify
+
+app = Flask(__name__)
+SHARED_SECRET = "your-shared-secret-key"
+
+@app.route('/webhook-handler', methods=['POST'])
+def handle_webhook():
+    # Получаем данные
+    payload = request.get_data(as_text=True)
+    signature = request.headers.get('X-Signature')
+    
+    # Проверяем подпись
+    expected_signature = hmac.new(
+        SHARED_SECRET.encode('utf-8'),
+        payload.encode('utf-8'),
+        hashlib.sha256
+    ).hexdigest()
+    
+    if not hmac.compare_digest(signature, expected_signature):
+        return jsonify({'error': 'Invalid signature'}), 403
+    
+    # Обрабатываем webhook
+    data = request.get_json()
+    print(f"Job {data['job_id']} completed")
+    
+    return jsonify({'success': True}), 200</code></pre>
+
+                    <h4>Node.js пример</h4>
+                    <pre><code class="language-javascript">const express = require('express');
+const crypto = require('crypto');
+const app = express();
+
+const SHARED_SECRET = 'your-shared-secret-key';
+
+app.use(express.raw({type: 'application/json'}));
+
+app.post('/webhook-handler', (req, res) => {
+    const payload = req.body.toString();
+    const signature = req.headers['x-signature'];
+    
+    // Проверяем подпись
+    const expectedSignature = crypto
+        .createHmac('sha256', SHARED_SECRET)
+        .update(payload)
+        .digest('hex');
+    
+    if (signature !== expectedSignature) {
+        return res.status(403).json({error: 'Invalid signature'});
+    }
+    
+    const data = JSON.parse(payload);
+    console.log(`Job ${data.job_id} completed`);
+    
+    res.json({success: true});
+});</code></pre>
+                </section>
+
+                <section id="errors" class="mb-5">
+                    <h2>Обработка ошибок и повторы</h2>
+                    
+                    <h4>Система повторов</h4>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-body text-center">
+                                    <h5>5</h5>
+                                    <small>максимум попыток</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-body text-center">
+                                    <h5>30 сек</h5>
+                                    <small>таймаут запроса</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-body text-center">
+                                    <h5>1-16 мин</h5>
+                                    <small>интервалы повторов</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <h4 class="mt-4">Коды ответа</h4>
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Код</th>
+                                    <th>Результат</th>
+                                    <th>Действие системы</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr class="table-success">
+                                    <td>200-299</td>
+                                    <td>Успех</td>
+                                    <td>Доставка завершена</td>
+                                </tr>
+                                <tr class="table-warning">
+                                    <td>400-499</td>
+                                    <td>Ошибка клиента</td>
+                                    <td>Повтор не выполняется</td>
+                                </tr>
+                                <tr class="table-info">
+                                    <td>500-599</td>
+                                    <td>Ошибка сервера</td>
+                                    <td>Повтор через интервал</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section id="monitoring" class="mb-5">
+                    <h2>Мониторинг веб-хуков</h2>
+                    
+                    <h4>API endpoints для мониторинга</h4>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6>Метрики</h6>
+                                </div>
+                                <div class="card-body">
+                                    <code>GET /api/v1/webhook-metrics</code>
+                                    <p class="small mt-2">Статистика доставки за период</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6>Здоровье системы</h6>
+                                </div>
+                                <div class="card-body">
+                                    <code>GET /api/v1/webhook-health</code>
+                                    <p class="small mt-2">Общий статус webhook системы</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6>Ошибки</h6>
+                                </div>
+                                <div class="card-body">
+                                    <code>GET /api/v1/webhook-failures</code>
+                                    <p class="small mt-2">Список неудачных доставок</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="best-practices" class="mb-5">
+                    <h2>Лучшие практики</h2>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h5>Безопасность</h5>
+                            <ul class="list-group list-group-flush">
+                                <li class="list-group-item">✅ Проверяйте подпись X-Signature</li>
+                                <li class="list-group-item">✅ Используйте HTTPS endpoints</li>
+                                <li class="list-group-item">✅ Не логируйте секретные ключи</li>
+                                <li class="list-group-item">✅ Ограничьте доступ к endpoint'у</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h5>Надежность</h5>
+                            <ul class="list-group list-group-flush">
+                                <li class="list-group-item">✅ Возвращайте 200 быстро</li>
+                                <li class="list-group-item">✅ Асинхронная обработка</li>
+                                <li class="list-group-item">✅ Идемпотентность операций</li>
+                                <li class="list-group-item">✅ Fallback через polling API</li>
+                            </ul>
+                        </div>
+                    </div>
+                </section>
+
+                <div class="alert alert-info mt-5">
+                    <h5>Нужна помощь?</h5>
+                    <p class="mb-0">
+                        Если у вас возникли вопросы по настройке веб-хуков, проверьте:
+                    </p>
+                    <ul class="mb-0">
+                        <li>Логи вашего приложения</li>
+                        <li>API мониторинга для диагностики</li>
+                        <li>Примеры кода в документации</li>
+                        <li>Обратитесь в техподдержку с деталями</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="bg-dark text-light py-4 mt-5">
+        <div class="container text-center">
+            <p>&copy; 2025 Generation Service. Система генерации описаний автомобилей с ИИ.</p>
+        </div>
+    </footer>
+</body>
+</html>

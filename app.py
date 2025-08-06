@@ -62,6 +62,11 @@ def api_docs():
     from flask import render_template
     return render_template('api_docs.html')
 
+@app.route('/webhook-guide')
+def webhook_guide():
+    from flask import render_template
+    return render_template('webhook_guide.html')
+
 # Health check endpoint
 @app.route('/health')
 def health():
