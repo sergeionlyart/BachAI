@@ -88,10 +88,10 @@ def get_job_results(job_id: str):
             lot_result = {
                 "lot_id": lot.lot_id,
                 "status": lot.status,
-                "vision_result": lot.vision_result or "No vision result",
-                "translations": lot.translations or {},
-                "error_message": lot.error_message or None,
-                "missing_images": lot.missing_images or []
+                "vision_result": lot.vision_result if lot.vision_result is not None else "No vision result",
+                "translations": lot.translations if lot.translations is not None else {},
+                "error_message": lot.error_message if lot.error_message is not None else None,
+                "missing_images": lot.missing_images if lot.missing_images is not None else []
             }
             results.append(lot_result)
         
