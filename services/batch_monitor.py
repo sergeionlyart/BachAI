@@ -227,28 +227,34 @@ class BatchMonitor:
                     logger.info(f"Body keys: {list(body.keys()) if body else 'None'}")
                     
                     if isinstance(body, dict):
-                        # For OpenAI Responses API - the actual text is in output field
-                        # Structure: body.output[0].content[0].text
+                        # For OpenAI Responses API - find the message output with actual text
+                        # Structure: body.output[i] where output[i].type == "message"
                         output = body.get('output', [])
                         
                         if output and isinstance(output, list) and len(output) > 0:
-                            first_output = output[0]
-                            if isinstance(first_output, dict):
-                                content = first_output.get('content', [])
+                            # Find the message output (not reasoning)
+                            message_output = None
+                            for out in output:
+                                if isinstance(out, dict) and out.get('type') == 'message':
+                                    message_output = out
+                                    break
+                            
+                            if message_output:
+                                content = message_output.get('content', [])
                                 if content and isinstance(content, list) and len(content) > 0:
                                     first_content = content[0]
                                     if isinstance(first_content, dict):
                                         vision_text = first_content.get('text', '')
                                         if vision_text:
-                                            logger.info(f"Extracted text from output field for lot {lot_id}: {len(vision_text)} chars")
+                                            logger.info(f"Extracted text from message output for lot {lot_id}: {len(vision_text)} chars")
                                         else:
                                             logger.warning(f"No text in content for lot {lot_id}")
                                     else:
                                         logger.warning(f"First content is not dict for lot {lot_id}: {type(first_content)}")
                                 else:
-                                    logger.warning(f"No content in output for lot {lot_id}")
+                                    logger.warning(f"No content in message output for lot {lot_id}")
                             else:
-                                logger.warning(f"First output is not dict for lot {lot_id}: {type(first_output)}")
+                                logger.warning(f"No message output found for lot {lot_id}, available types: {[out.get('type') for out in output if isinstance(out, dict)]}")
                         else:
                             # Legacy fallback to choices format (for older chat completions)
                             choices = body.get('choices', [])

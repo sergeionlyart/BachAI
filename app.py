@@ -92,7 +92,8 @@ import sys
 should_start_background = (
     __name__ == '__main__' or  # Development mode
     '--enable-background-services' in sys.argv or  # Explicit flag
-    os.environ.get('ENABLE_BACKGROUND_SERVICES', 'false').lower() == 'true'  # Environment variable
+    os.environ.get('ENABLE_BACKGROUND_SERVICES', 'false').lower() == 'true' or  # Environment variable
+    os.environ.get('DEPLOYMENT_TARGET') != 'autoscale'  # Force start unless explicitly disabled for deployment
 )
 
 if should_start_background:
