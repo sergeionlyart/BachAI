@@ -87,8 +87,16 @@ def start_background_services():
 # Global background worker instance
 _background_worker = None
 
-# Initialize background services
-start_background_services()
+# Initialize background services based on environment
+import sys
+should_start_background = (
+    __name__ == '__main__' or  # Development mode
+    '--enable-background-services' in sys.argv or  # Explicit flag
+    os.environ.get('ENABLE_BACKGROUND_SERVICES', 'false').lower() == 'true'  # Environment variable
+)
+
+if should_start_background:
+    start_background_services()
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
