@@ -227,46 +227,48 @@ class BatchMonitor:
                     logger.info(f"Body keys: {list(body.keys()) if body else 'None'}")
                     
                     if isinstance(body, dict):
-                        # For OpenAI Responses API - primary field is 'text'
-                        text = body.get('text', '')
-                        logger.info(f"Raw text field for lot {lot_id}: {type(text)} - {str(text)[:200]}")
+                        # For OpenAI Responses API - the actual text is in output field
+                        # Structure: body.output[0].content[0].text
+                        output = body.get('output', [])
                         
-                        # Handle different text field formats
-                        if isinstance(text, str) and text:
-                            vision_text = text
-                            logger.info(f"Found text string for lot {lot_id}: {len(text)} chars")
-                        elif isinstance(text, dict):
-                            # If text is a dict, look for nested content
-                            text_content = text.get('content', '') or text.get('value', '') or str(text)
-                            if text_content and isinstance(text_content, str):
-                                vision_text = text_content
-                                logger.info(f"Extracted text from dict for lot {lot_id}: {len(text_content)} chars")
-                            else:
-                                logger.warning(f"Text dict has no extractable content for lot {lot_id}: {text}")
-                        elif text:
-                            # Convert to string if it's another type
-                            vision_text = str(text)
-                            logger.info(f"Converted text to string for lot {lot_id}: {len(vision_text)} chars")
-                        else:
-                            # Fallback to 'output' field
-                            output = body.get('output', '')
-                            if output:
-                                vision_text = output
-                                logger.info(f"Found output for lot {lot_id}: {len(output)} chars")
-                            else:
-                                # Legacy fallback to choices format
-                                choices = body.get('choices', [{}])
-                                logger.info(f"Trying choices fallback, choices count: {len(choices) if choices else 0}")
-                                if choices and len(choices) > 0:
-                                    message = choices[0].get('message', {})
-                                    content = message.get('content', '')
-                                    if content:
-                                        vision_text = content
-                                        logger.info(f"Found content in choices for lot {lot_id}: {len(content)} chars")
+                        if output and isinstance(output, list) and len(output) > 0:
+                            first_output = output[0]
+                            if isinstance(first_output, dict):
+                                content = first_output.get('content', [])
+                                if content and isinstance(content, list) and len(content) > 0:
+                                    first_content = content[0]
+                                    if isinstance(first_content, dict):
+                                        vision_text = first_content.get('text', '')
+                                        if vision_text:
+                                            logger.info(f"Extracted text from output field for lot {lot_id}: {len(vision_text)} chars")
+                                        else:
+                                            logger.warning(f"No text in content for lot {lot_id}")
                                     else:
-                                        logger.warning(f"No content in message for lot {lot_id}, message keys: {list(message.keys()) if message else 'None'}")
+                                        logger.warning(f"First content is not dict for lot {lot_id}: {type(first_content)}")
                                 else:
-                                    logger.warning(f"No valid choices for lot {lot_id}")
+                                    logger.warning(f"No content in output for lot {lot_id}")
+                            else:
+                                logger.warning(f"First output is not dict for lot {lot_id}: {type(first_output)}")
+                        else:
+                            # Legacy fallback to choices format (for older chat completions)
+                            choices = body.get('choices', [])
+                            logger.info(f"Trying choices fallback, choices count: {len(choices) if choices else 0}")
+                            if choices and len(choices) > 0:
+                                message = choices[0].get('message', {})
+                                content = message.get('content', '')
+                                if content:
+                                    vision_text = content
+                                    logger.info(f"Found content in choices for lot {lot_id}: {len(content)} chars")
+                                else:
+                                    logger.warning(f"No content in message for lot {lot_id}")
+                            else:
+                                # Final fallback - check if text field has actual content (not just format)
+                                text = body.get('text', '')
+                                if isinstance(text, str) and text and not text.startswith('{'):
+                                    vision_text = text
+                                    logger.info(f"Found text string in text field for lot {lot_id}: {len(text)} chars")
+                                else:
+                                    logger.warning(f"No valid output or choices for lot {lot_id}")
                     else:
                         logger.warning(f"Body is not dict for lot {lot_id}: {type(body)}")
                 else:
