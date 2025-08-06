@@ -68,8 +68,8 @@ def generate_descriptions():
     except json.JSONDecodeError:
         return jsonify({"error": "Invalid JSON"}), 400
     except Exception as e:
-        logger.error(f"Request processing error: {str(e)}")
-        return jsonify({"error": "Internal server error"}), 500
+        logger.error(f"Request processing error: {str(e)}", exc_info=True)
+        return jsonify({"error": "Internal server error", "debug": str(e)}), 500
 
 def handle_sync_request(lot, languages):
     """

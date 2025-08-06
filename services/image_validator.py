@@ -35,10 +35,11 @@ class ImageValidator:
             return False, "Invalid URL format"
         
         try:
-            # Try HEAD request first
+            # Try HEAD request first with proper redirect handling
             response = self.session.head(url, timeout=IMAGE_HEAD_TIMEOUT, allow_redirects=True)
             
-            if response.status_code >= 200 and response.status_code < 300:
+            # Accept redirects (3xx) and success (2xx) codes
+            if response.status_code >= 200 and response.status_code < 400:
                 # Check content type
                 content_type = response.headers.get('Content-Type', '').lower()
                 if not content_type.startswith('image/'):
@@ -61,10 +62,12 @@ class ImageValidator:
                 url, 
                 timeout=IMAGE_GET_TIMEOUT, 
                 stream=True,
+                allow_redirects=True,
                 headers={'Range': f'bytes=0-{IMAGE_GET_MAX_SIZE}'}
             )
             
-            if response.status_code >= 200 and response.status_code < 300:
+            # Accept redirects (3xx) and success (2xx) codes
+            if response.status_code >= 200 and response.status_code < 400:
                 content_type = response.headers.get('Content-Type', '').lower()
                 if not content_type.startswith('image/'):
                     return False, f"Invalid content type: {content_type}"
