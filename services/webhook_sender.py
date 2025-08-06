@@ -3,16 +3,73 @@ import hashlib
 import hmac
 import json
 import requests
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
-from config import SHARED_KEY
+from urllib.parse import urlparse
+from config import SHARED_KEY, WEBHOOK_RETRY_ATTEMPTS
 
 logger = logging.getLogger(__name__)
+
+def is_safe_webhook_url(url: str) -> bool:
+    """
+    Validate webhook URL for security (prevent SSRF attacks)
+    Returns True if URL is safe to use
+    """
+    try:
+        parsed = urlparse(url)
+        
+        # Check scheme
+        if parsed.scheme not in ['http', 'https']:
+            logger.warning(f"Invalid webhook URL scheme: {parsed.scheme}")
+            return False
+        
+        # Check hostname exists
+        if not parsed.hostname:
+            logger.warning(f"No hostname in webhook URL: {url}")
+            return False
+        
+        # Block localhost and internal IPs
+        hostname = parsed.hostname.lower()
+        blocked_hosts = [
+            'localhost', '127.0.0.1', '0.0.0.0',
+            '::1', '::ffff:127.0.0.1'
+        ]
+        
+        if hostname in blocked_hosts:
+            logger.warning(f"Webhook URL points to localhost: {hostname}")
+            return False
+        
+        # Block internal IP ranges (10.x.x.x, 172.16-31.x.x, 192.168.x.x)
+        if hostname.startswith('10.') or hostname.startswith('192.168.'):
+            logger.warning(f"Webhook URL points to internal network: {hostname}")
+            return False
+        
+        if hostname.startswith('172.'):
+            octets = hostname.split('.')
+            if len(octets) >= 2:
+                second_octet = int(octets[1])
+                if 16 <= second_octet <= 31:
+                    logger.warning(f"Webhook URL points to internal network: {hostname}")
+                    return False
+        
+        # Block cloud metadata endpoints
+        if hostname in ['169.254.169.254', 'metadata.google.internal']:
+            logger.warning(f"Webhook URL points to metadata endpoint: {hostname}")
+            return False
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error validating webhook URL {url}: {str(e)}")
+        return False
 
 class WebhookSender:
     def __init__(self, db_session):
         self.session = db_session
         self.shared_key = SHARED_KEY
+        self.max_retries = WEBHOOK_RETRY_ATTEMPTS
+        # Unified retry delays: 0s, 30s, 60s, 120s, 300s
+        self.retry_delays = [0, 30, 60, 120, 300]
     
     def send_completion_webhook(self, job_id: str) -> bool:
         """Send webhook notification for completed job"""
@@ -73,10 +130,9 @@ class WebhookSender:
         try:
             # Import here to avoid circular imports
             from database.models import WebhookDelivery
-            import uuid
             
+            # Fix: Remove id from constructor - it's auto-generated
             delivery = WebhookDelivery(
-                id=uuid.uuid4(),
                 batch_job_id=job_id,
                 webhook_url=webhook_url,
                 payload=payload,
@@ -105,6 +161,15 @@ class WebhookSender:
             ).first()
             
             if not delivery:
+                return False
+            
+            # Validate webhook URL for security
+            if not is_safe_webhook_url(delivery.webhook_url):
+                self._update_delivery_status(
+                    delivery_id, 'failed',
+                    error_message="Invalid or unsafe webhook URL"
+                )
+                logger.error(f"Webhook URL failed security validation: {delivery.webhook_url}")
                 return False
             
             # Prepare headers
@@ -156,8 +221,8 @@ class WebhookSender:
             return False
     
     def _update_delivery_status(self, delivery_id: str, status: str, 
-                               response_status: int = None, response_body: str = None, 
-                               error_message: str = None):
+                               response_status: Optional[int] = None, response_body: Optional[str] = None, 
+                               error_message: Optional[str] = None):
         """Update webhook delivery status"""
         try:
             # Import here to avoid circular imports
@@ -176,9 +241,10 @@ class WebhookSender:
             
             if status == 'delivered':
                 delivery.delivered_at = datetime.utcnow()
-            elif status == 'failed' and delivery.attempt_count < 5:
-                # Schedule next retry with exponential backoff
-                delay_seconds = 2 ** delivery.attempt_count
+            elif status == 'failed' and delivery.attempt_count < self.max_retries:
+                # Schedule next retry with unified delay strategy
+                attempt_index = min(delivery.attempt_count, len(self.retry_delays) - 1)
+                delay_seconds = self.retry_delays[attempt_index]
                 delivery.next_attempt_at = datetime.utcnow() + timedelta(seconds=delay_seconds)
             
             if response_status is not None:
@@ -213,8 +279,6 @@ class WebhookSender:
         Deliver single webhook and return success status
         """
         try:
-            import json
-            import requests
             
             # Prepare payload
             payload_json = json.dumps(webhook_delivery.payload, separators=(',', ':'))
@@ -239,12 +303,12 @@ class WebhookSender:
                 logger.warning(f"Webhook delivery failed with status {response.status_code}: {response.text}")
                 return False
                 
-        except requests.exceptions.Timeout:
-            logger.warning(f"Webhook delivery timeout to {webhook_delivery.webhook_url}")
-            return False
-        except requests.exceptions.RequestException as e:
-            logger.warning(f"Webhook delivery failed to {webhook_delivery.webhook_url}: {str(e)}")
-            return False
         except Exception as e:
-            logger.error(f"Unexpected error delivering webhook: {str(e)}")
+            error_type = str(type(e).__name__)
+            if 'Timeout' in error_type:
+                logger.warning(f"Webhook delivery timeout to {webhook_delivery.webhook_url}")
+            elif 'RequestException' in error_type:
+                logger.warning(f"Webhook delivery failed to {webhook_delivery.webhook_url}: {str(e)}")
+            else:
+                logger.error(f"Unexpected error delivering webhook: {str(e)}")
             return False

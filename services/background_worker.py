@@ -26,6 +26,11 @@ class BackgroundWorker:
         self.check_interval = 30  # Check every 30 seconds
         self.max_webhook_retries = 5
         
+        # Services will be initialized when worker starts
+        self.db_manager = None
+        self.batch_monitor = None
+        self.webhook_sender = None
+        
     def start(self):
         """
         Start background worker in separate thread
@@ -57,21 +62,32 @@ class BackgroundWorker:
         """
         logger.info("Background worker loop started")
         
+        # Initialize services once at the start
+        services_initialized = False
+        
         while self.running:
             try:
                 # Use Flask application context for database operations
                 if self.flask_app:
                     with self.flask_app.app_context():
-                        # Initialize services within app context
-                        db_manager = DatabaseManager(db.session)
-                        batch_monitor = BatchMonitor()
-                        webhook_sender = WebhookSender(db.session)
+                        # Initialize services only once
+                        if not services_initialized:
+                            try:
+                                self.db_manager = DatabaseManager(db.session)
+                                self.batch_monitor = BatchMonitor()
+                                self.webhook_sender = WebhookSender(db.session)
+                                services_initialized = True
+                                logger.info("Background worker services initialized successfully")
+                            except Exception as init_error:
+                                logger.error(f"Failed to initialize background worker services: {str(init_error)}")
+                                time.sleep(10)
+                                continue
                         
                         # Monitor active batch jobs
-                        self._monitor_batch_jobs(db_manager, batch_monitor)
+                        self._monitor_batch_jobs(self.db_manager, self.batch_monitor)
                         
                         # Process pending webhooks
-                        self._process_pending_webhooks(db_manager, webhook_sender)
+                        self._process_pending_webhooks(self.db_manager, self.webhook_sender)
                 else:
                     logger.error("Flask app not initialized, skipping background worker iteration")
                 
@@ -80,6 +96,10 @@ class BackgroundWorker:
                 
             except Exception as e:
                 logger.error(f"Background worker error: {str(e)}")
+                # Reset services if there's a persistent error
+                if str(e).lower().find('connection') != -1 or str(e).lower().find('database') != -1:
+                    services_initialized = False
+                    logger.info("Resetting background worker services due to connection error")
                 time.sleep(5)  # Short sleep on error before retrying
     
     def _monitor_batch_jobs(self, db_manager, batch_monitor):

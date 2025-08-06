@@ -43,6 +43,10 @@ app.register_blueprint(polling_bp, url_prefix='/api/v1')
 from routes.jobs_api import jobs_bp
 app.register_blueprint(jobs_bp)
 
+# Import and register webhook monitoring API
+from routes.webhook_monitoring import webhook_monitoring_bp
+app.register_blueprint(webhook_monitoring_bp)
+
 # Root route for documentation
 @app.route('/')
 def index():
