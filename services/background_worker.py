@@ -113,7 +113,10 @@ class BackgroundWorker:
             for job in active_jobs:
                 try:
                     # Check job status with OpenAI
-                    updated_job = batch_monitor.check_job_status(str(job.id))
+                    batch_monitor._check_job_status(job)
+                    
+                    # Refresh job from database to get updated status
+                    updated_job = db_manager.get_batch_job(str(job.id))
                     
                     if updated_job and updated_job.status == 'completed':
                         # Job completed - create webhook delivery
