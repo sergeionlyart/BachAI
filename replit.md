@@ -85,6 +85,14 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Updates
 
+### August 6, 2025 - Polling API Fix and Stuck Batch Resolution ✅
+- **Fixed Polling Issue**: Client polling requests were stuck showing "translating" status due to OpenAI batch timeout
+- **Added Simple Job Endpoints**: Created `/api/v1/jobs/{job_id}/status` and `/api/v1/jobs/{job_id}` for client compatibility
+- **Resolved Stuck Batch**: Job 365a09ce-5416-49b5-8471-d6aad042761c was stuck for 7+ hours in OpenAI translation batch
+- **Data Correction**: Fixed vision results stored as dict strings instead of actual text content
+- **Completed Job Recovery**: Marked job as complete with English-only results when translation batch timed out
+- **Client Compatibility**: Polling client script now works correctly with simplified endpoints
+
 ### August 5, 2025 - Enhanced Synchronous Translation System ✅
 - **Flexible Translation Processing**: Added configurable threshold for warning about large language lists during synchronous requests
 - **Improved Client Experience**: Revised synchronous translation handling to process all requested languages with English fallbacks when exceeding time limits

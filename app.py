@@ -39,6 +39,10 @@ with app.app_context():
 app.register_blueprint(api_bp)
 app.register_blueprint(polling_bp, url_prefix='/api/v1')
 
+# Import and register simple jobs API for polling clients
+from routes.jobs_api import jobs_bp
+app.register_blueprint(jobs_bp)
+
 # Root route for documentation
 @app.route('/')
 def index():
