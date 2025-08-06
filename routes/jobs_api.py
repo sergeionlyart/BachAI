@@ -79,7 +79,7 @@ def get_job_results(job_id: str):
         
         # Get all lots for completed job
         lots = db.session.query(BatchLot).filter(
-            BatchLot.batch_job_id == str(job.id)
+            BatchLot.batch_job_id == job.id
         ).all()
         
         # Build full results
