@@ -19,7 +19,9 @@ def generate_signature(payload: str, shared_key: str) -> str:
         hashlib.sha256
     ).hexdigest()
 
-def make_authenticated_request(endpoint: str, method: str = "GET", data: dict = None):
+from typing import Optional
+
+def make_authenticated_request(endpoint: str, method: str = "GET", data: Optional[dict] = None):
     """Делает аутентифицированный запрос к API"""
     
     # Подготавливаем payload

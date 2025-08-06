@@ -88,9 +88,9 @@ def get_job_results(job_id: str):
             lot_result = {
                 "lot_id": lot.lot_id,
                 "status": lot.status,
-                "vision_result": lot.vision_result,
+                "vision_result": lot.vision_result or "No vision result",
                 "translations": lot.translations or {},
-                "error_message": lot.error_message,
+                "error_message": lot.error_message or None,
                 "missing_images": lot.missing_images or []
             }
             results.append(lot_result)
