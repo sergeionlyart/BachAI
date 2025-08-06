@@ -282,22 +282,22 @@ class BatchMonitor:
                 if lot_id in lot_map:
                     lot = lot_map[lot_id]
                     if vision_text and isinstance(vision_text, str):
-                        lot.vision_result = vision_text
-                        lot.status = 'processing'  # Will be completed after translations
-                        lot.updated_at = datetime.utcnow()
+                        setattr(lot, 'vision_result', vision_text)
+                        setattr(lot, 'status', 'processing')  # Will be completed after translations
+                        setattr(lot, 'updated_at', datetime.utcnow())
                         logger.info(f"Vision result saved for lot {lot_id}: {len(vision_text)} characters")
                     else:
-                        lot.status = 'failed'
-                        lot.error_message = f'No valid vision result: {type(vision_text)} - {str(vision_text)[:100]}'
-                        lot.updated_at = datetime.utcnow()
+                        setattr(lot, 'status', 'failed')
+                        setattr(lot, 'error_message', f'No valid vision result: {type(vision_text)} - {str(vision_text)[:100]}')
+                        setattr(lot, 'updated_at', datetime.utcnow())
                         logger.error(f"No vision result for lot {lot_id}: {type(vision_text)} - {str(vision_text)[:100]}")
                 else:
                     logger.warning(f"Lot {lot_id} not found in job {job.id}")
             
             # Update job progress
-            successful_lots = len([lot for lot in lots if lot.vision_result])
-            job.processed_lots = successful_lots
-            job.updated_at = datetime.utcnow()
+            successful_lots = len([lot for lot in lots if getattr(lot, 'vision_result', None)])
+            setattr(job, 'processed_lots', successful_lots)
+            setattr(job, 'updated_at', datetime.utcnow())
             
             # Commit changes
             self.db_manager.session.commit()
@@ -351,21 +351,23 @@ class BatchMonitor:
                 # Update lot with translation
                 if lot_id in lot_map and translated_text:
                     lot = lot_map[lot_id]
-                    if not lot.translations:
-                        lot.translations = {}
-                    lot.translations[language] = translated_text
-                    lot.updated_at = datetime.utcnow()
+                    current_translations = getattr(lot, 'translations', None) or {}
+                    current_translations[language] = translated_text
+                    setattr(lot, 'translations', current_translations)
+                    setattr(lot, 'updated_at', datetime.utcnow())
                     logger.info(f"Translation saved for lot {lot_id} in {language}: {len(translated_text)} characters")
             
             # Mark all lots as completed
             for lot in lots:
-                if lot.vision_result:  # Only mark as completed if has vision result
-                    lot.status = 'completed'
+                if getattr(lot, 'vision_result', None):  # Only mark as completed if has vision result
+                    setattr(lot, 'status', 'completed')
             
             # Update job to reflect completion
-            job.processed_lots = len([lot for lot in lots if lot.status == 'completed'])
-            job.failed_lots = len([lot for lot in lots if lot.status == 'failed'])
-            job.updated_at = datetime.utcnow()
+            completed_lots = len([lot for lot in lots if getattr(lot, 'status', None) == 'completed'])
+            failed_lots = len([lot for lot in lots if getattr(lot, 'status', None) == 'failed'])
+            setattr(job, 'processed_lots', completed_lots)
+            setattr(job, 'failed_lots', failed_lots)
+            setattr(job, 'updated_at', datetime.utcnow())
             
             # Commit changes
             self.db_manager.session.commit()
@@ -393,11 +395,11 @@ class BatchMonitor:
             
             for lot in lots:
                 lot_result = {
-                    'lot_id': lot.lot_id,
-                    'status': lot.status,
-                    'vision_result': lot.vision_result,
-                    'translations': lot.translations or {},
-                    'error_message': lot.error_message,
+                    'lot_id': getattr(lot, 'lot_id'),
+                    'status': getattr(lot, 'status'),
+                    'vision_result': getattr(lot, 'vision_result'),
+                    'translations': getattr(lot, 'translations') or {},
+                    'error_message': getattr(lot, 'error_message'),
                     'missing_images': lot.missing_images
                 }
                 results_data['lots'].append(lot_result)
@@ -453,9 +455,9 @@ class BatchMonitor:
             translation_requests = []
             
             for lot in lots:
-                english_text = lot.vision_result
+                english_text = getattr(lot, 'vision_result', None)
                 if not english_text or not isinstance(english_text, str):
-                    logger.warning(f"Skipping lot {lot.lot_id}: no valid vision result")
+                    logger.warning(f"Skipping lot {getattr(lot, 'lot_id')}: no valid vision result")
                     continue
                 
                 for lang in job.languages:
