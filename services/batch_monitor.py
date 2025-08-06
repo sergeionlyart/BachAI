@@ -72,7 +72,7 @@ class BatchMonitor:
             job_id = str(job.id)
             
             # Check vision batch status (including failed jobs with completed OpenAI batches)
-            if job.openai_vision_batch_id and job.status in ['processing', 'failed']:
+            if job.openai_batch_id and job.status in ['processing', 'failed']:
                 self._check_vision_batch(job)
             
             # Check translation batch status
@@ -87,7 +87,7 @@ class BatchMonitor:
     def _check_vision_batch(self, job):
         """Check OpenAI vision batch status"""
         try:
-            batch_status = self.openai_client.get_batch_status(job.openai_vision_batch_id)
+            batch_status = self.openai_client.get_batch_status(job.openai_batch_id)
             
             if batch_status['status'] == 'completed':
                 logger.info(f"Vision batch completed for job {job.id} (was {job.status})")

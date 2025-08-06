@@ -135,7 +135,7 @@ class BatchProcessor:
                 'job_id': job_id,
                 'status': status,
                 'languages': languages,
-                'openai_vision_batch_id': vision_batch_id,
+                'openai_batch_id': vision_batch_id,  # FIXED: Use correct field name
                 'lots': processed_lots,
                 'error_message': None if vision_batch_id else 'Batch submission failed'
             }
@@ -163,8 +163,8 @@ class BatchProcessor:
         
         try:
             # Check vision batch status
-            if job.openai_vision_batch_id and job.status == 'processing':
-                vision_status = self.openai_client.get_batch_status(job.openai_vision_batch_id)
+            if job.openai_batch_id and job.status == 'processing':
+                vision_status = self.openai_client.get_batch_status(job.openai_batch_id)
                 
                 if vision_status['status'] == 'completed':
                     # Download and process vision results
