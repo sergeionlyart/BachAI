@@ -8,7 +8,7 @@ import hmac
 import hashlib
 import requests
 import time
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 
 class CarDescriptionClient:
     """
@@ -27,7 +27,7 @@ class CarDescriptionClient:
             hashlib.sha256
         ).hexdigest()
     
-    def _make_request(self, method: str, endpoint: str, data: Optional[Dict] = None) -> requests.Response:
+    def _make_request(self, method: str, endpoint: str, data: Optional[Dict[str, Any]] = None) -> requests.Response:
         """Выполняет аутентифицированный запрос"""
         url = f"{self.base_url}{endpoint}"
         
@@ -49,7 +49,7 @@ class CarDescriptionClient:
         
         raise ValueError(f"Unsupported method: {method}")
     
-    def create_job(self, lots: List[Dict], languages: List[str] = None, webhook_url: str = None) -> Dict:
+    def create_job(self, lots: List[Dict[str, Any]], languages: Optional[List[str]] = None, webhook_url: Optional[str] = None) -> Dict[str, Any]:
         """
         Создает задачу для генерации описаний
         
@@ -61,7 +61,7 @@ class CarDescriptionClient:
         Returns:
             Dict: Информация о созданной задаче
         """
-        data = {"lots": lots}
+        data: Dict[str, Any] = {"lots": lots}
         
         if languages:
             data["languages"] = languages
