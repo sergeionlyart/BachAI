@@ -47,6 +47,10 @@ app.register_blueprint(jobs_bp)
 from routes.webhook_monitoring import webhook_monitoring_bp
 app.register_blueprint(webhook_monitoring_bp)
 
+# Import and register test webhook endpoint for testing
+from routes.test_webhook import test_webhook_bp
+app.register_blueprint(test_webhook_bp)
+
 # Root route for documentation
 @app.route('/')
 def index():
